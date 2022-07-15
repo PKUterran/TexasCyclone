@@ -16,9 +16,6 @@ class Layout:
         self.netlist = netlist
 
 
-def layout_from_netlist_dis_angle(
-        netlist: Netlist,
-        nets_dis: torch.Tensor, nets_angle: torch.Tensor,
-        pins_dis: torch.Tensor, pins_angle: torch.Tensor,
-) -> Tuple[Layout, torch.Tensor]:
+def layout_from_netlist_dis_angle(netlist: Netlist, pins_dis: torch.Tensor, pins_angle: torch.Tensor
+                                  ) -> Tuple[Layout, torch.Tensor]:
     pass
