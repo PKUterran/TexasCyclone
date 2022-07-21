@@ -11,16 +11,11 @@ from data.Netlist import Netlist
 
 class Layout:
     def __init__(
-            self, graph: dgl.DGLHeteroGraph,
-            cell_prop_dict: Dict[str, torch.Tensor],
-            net_prop_dict: Dict[str, torch.Tensor],
-            pin_prop_dict: Dict[str, torch.Tensor],
+            self, netlist: Netlist,
     ):
-        self.graph = graph
-        self.cell_prop_dict = cell_prop_dict
-        self.net_prop_dict = net_prop_dict
-        self.pin_prop_dict = pin_prop_dict
+        self.netlist = netlist
 
-    @staticmethod
-    def from_netlist_dis_angle(netlist: Netlist, pins_dis: torch.Tensor, pins_angle: torch.Tensor):
-        pass
+
+def layout_from_netlist_dis_angle(netlist: Netlist, pins_dis: torch.Tensor, pins_angle: torch.Tensor
+                                  ) -> Tuple[Layout, torch.Tensor]:
+    pass
