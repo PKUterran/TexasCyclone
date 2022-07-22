@@ -1,11 +1,13 @@
 import numpy as np
 import torch
+import torch.sparse as sparse
 import pickle
 import dgl
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Union
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
+from data.graph import Tree, generate_net_tree_from_netlist_graph
 
 POS_FAC = 1000
 
@@ -26,19 +28,31 @@ class Netlist:
         self.n_net = graph.num_nodes(ntype='net')
         self.n_pin = graph.num_edges(etype='pinned')
 
-        self._net_father_list = None
+        self._net_tree = None
         self._net_offset_pos_matrix = None
 
     @property
-    def net_father_list(self):
-        if self._net_father_list is None:
-            self._net_father_list = []
-        return self._net_father_list
+    def net_tree(self) -> Tree:
+        if self._net_tree is None:
+            self._net_tree = generate_net_tree_from_netlist_graph(self.graph)
+        return self._net_tree
 
     @property
-    def net_offset_pos_matrix(self):
+    def net_offset_pos_matrix(self) -> sparse.Tensor:
         if self._net_offset_pos_matrix is None:
-            self._net_offset_pos_matrix = torch.zeros(size=[self.n_net, self.n_net], dtype=torch.float32)
+            net_tree = self.net_tree
+            indices = [[], []]
+            values = []
+            for k, path in net_tree.path_dict.items():
+                for p in path:
+                    indices[0].append(k)
+                    indices[1].append(p)
+                    values.append(1)
+            self._net_offset_pos_matrix = torch.sparse_coo_tensor(
+                indices=torch.tensor(indices, dtype=torch.int32),
+                values=values,
+                size=[self.n_net, self.n_net]
+            )
         return self._net_offset_pos_matrix
 
 
@@ -82,10 +96,6 @@ def netlist_from_numpy_directory(dir_name: str, given_iter=None) -> Netlist:
     pins_data = torch.tensor(pins_data, dtype=torch.float32)
 
     # 3. construct graph
-    print(cells)
-    print(nets)
-    print(n_cell, n_net)
-    exit(123)
     graph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),
         ('net', 'pinned', 'cell'): (nets, cells),
@@ -125,5 +135,6 @@ if __name__ == '__main__':
     print(netlist.net_prop_dict)
     print(netlist.pin_prop_dict)
     print(netlist.n_cell, netlist.n_net, netlist.n_pin)
-    print(netlist.net_father_list)
-    print(netlist.net_offset_pos_matrix)
+    print(netlist.net_tree.children_dict)
+    print(netlist.net_tree.path_dict)
+    print(netlist.net_offset_pos_matrix.to_dense())
