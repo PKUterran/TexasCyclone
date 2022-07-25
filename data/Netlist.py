@@ -40,10 +40,9 @@ class Netlist:
     @property
     def net_offset_pos_matrix(self) -> sparse.Tensor:
         if self._net_offset_pos_matrix is None:
-            net_tree = self.net_tree
             indices = [[], []]
             values = []
-            for k, path in net_tree.path_dict.items():
+            for k, path in self.net_tree.path_dict.items():
                 for p in path:
                     indices[0].append(k)
                     indices[1].append(p)
