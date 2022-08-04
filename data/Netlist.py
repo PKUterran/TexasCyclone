@@ -30,6 +30,9 @@ class Netlist:
 
         self._net_tree = None
         self._net_offset_pos_matrix = None
+        self._pin_net_matrix = None
+        self._pin_cell_matrix = None
+        self._norm_pin_cell_matrix = None
 
     @property
     def net_tree(self) -> Tree:
@@ -50,9 +53,47 @@ class Netlist:
             self._net_offset_pos_matrix = torch.sparse_coo_tensor(
                 indices=torch.tensor(indices, dtype=torch.int32),
                 values=values,
-                size=[self.n_net, self.n_net]
+                size=[self.n_net, self.n_net], dtype=torch.float32
             )
         return self._net_offset_pos_matrix
+
+    @property
+    def pin_net_matrix(self) -> sparse.Tensor:
+        if self._pin_net_matrix is None:
+            nets, _ = self.graph.edges(etype='pinned')
+            pin_net_tuples = list(enumerate(nets))
+            self._pin_net_matrix = torch.sparse_coo_tensor(
+                indices=torch.tensor(pin_net_tuples, dtype=torch.int32).t(),
+                values=torch.ones(size=[self.n_pin]),
+                size=[self.n_pin, self.n_net], dtype=torch.float32
+            )
+        return self._pin_net_matrix
+
+    @property
+    def pin_cell_matrix(self) -> sparse.Tensor:
+        if self._pin_cell_matrix is None:
+            _, cells = self.graph.edges(etype='pinned')
+            self._pin_cell_matrix = torch.sparse_coo_tensor(
+                indices=torch.tensor(list(enumerate(cells)), dtype=torch.int32).t(),
+                values=torch.ones(size=[self.n_pin]),
+                size=[self.n_pin, self.n_cell], dtype=torch.float32
+            )
+        return self._pin_cell_matrix
+
+    @property
+    def norm_pin_cell_matrix(self) -> sparse.Tensor:
+        if self._norm_pin_cell_matrix is None:
+            _, cells = self.graph.edges(etype='pinned')
+            cells = cells.tolist()
+            dict_cell_cnt = {}
+            for c in cells:
+                dict_cell_cnt[c] = dict_cell_cnt.setdefault(c, 0) + 1
+            self._norm_pin_cell_matrix = torch.sparse_coo_tensor(
+                indices=torch.tensor(list(enumerate(cells)), dtype=torch.int32).t(),
+                values=[1 / dict_cell_cnt[c] for c in cells],
+                size=[self.n_pin, self.n_cell], dtype=torch.float32
+            )
+        return self._norm_pin_cell_matrix
 
 
 def netlist_from_numpy_directory(dir_name: str, given_iter=None) -> Netlist:
@@ -137,3 +178,5 @@ if __name__ == '__main__':
     print(netlist.net_tree.children_dict)
     print(netlist.net_tree.path_dict)
     print(netlist.net_offset_pos_matrix.to_dense())
+    print(netlist.pin_net_matrix.to_dense())
+    print(netlist.pin_cell_matrix.to_dense())
