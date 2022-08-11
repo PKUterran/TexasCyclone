@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
-from data.Netlist import netlist_from_numpy_directory
+from data.Netlist import netlist_from_numpy_directory_old
 from data.Layout import Layout, layout_from_netlist_dis_angle
 
 
@@ -44,10 +44,10 @@ def draw_layout(layout: Layout, title='default', directory='visualize/layouts'):
 
 if __name__ == '__main__':
     layout_, d_loss = layout_from_netlist_dis_angle(
-        netlist_from_numpy_directory('../data/test', 900),
+        netlist_from_numpy_directory_old('../data/test-old', 900),
         torch.tensor([400, 400, 400], dtype=torch.float32),
         torch.tensor([0, 0, -0.25], dtype=torch.float32),
-        torch.tensor([200, 200, 200, 400, 200, 200, 200], dtype=torch.float32),
+        torch.tensor([200, 200, 200, 450, 200, 200, 200], dtype=torch.float32),
         torch.tensor([-1, 0.5, -0.5, -0.8, 1.5, 1.3, 1.7], dtype=torch.float32),
     )
     print(d_loss)

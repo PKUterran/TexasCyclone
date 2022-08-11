@@ -96,7 +96,7 @@ class Netlist:
         return self._norm_pin_cell_matrix
 
 
-def netlist_from_numpy_directory(dir_name: str, given_iter=None) -> Netlist:
+def netlist_from_numpy_directory_old(dir_name: str, given_iter=None) -> Netlist:
     # 1. load data
     with open(f'{dir_name}/edge.pkl', 'rb') as fp:
         edge: Dict[int, Tuple[int, float, float, int]] = pickle.load(fp)
@@ -169,7 +169,7 @@ def netlist_from_numpy_directory(dir_name: str, given_iter=None) -> Netlist:
 
 
 if __name__ == '__main__':
-    netlist = netlist_from_numpy_directory('test', 900)
+    netlist = netlist_from_numpy_directory_old('test-old', 900)
     print(netlist.graph)
     print(netlist.cell_prop_dict)
     print(netlist.net_prop_dict)

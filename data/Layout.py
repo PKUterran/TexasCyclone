@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple, Optional
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
-from data.Netlist import Netlist, netlist_from_numpy_directory
+from data.Netlist import Netlist, netlist_from_numpy_directory_old
 
 
 class Layout:
@@ -45,7 +45,7 @@ def layout_from_netlist_dis_angle(
 
 if __name__ == '__main__':
     layout, d_loss = layout_from_netlist_dis_angle(
-        netlist_from_numpy_directory('test', 900),
+        netlist_from_numpy_directory_old('test-old', 900),
         torch.tensor([400, 400, 400], dtype=torch.float32),
         torch.tensor([0, 0, -0.25], dtype=torch.float32),
         torch.tensor([200, 200, 200, 400, 200, 200, 200], dtype=torch.float32),
