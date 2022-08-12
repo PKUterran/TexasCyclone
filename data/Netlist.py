@@ -168,8 +168,57 @@ def netlist_from_numpy_directory_old(dir_name: str, given_iter=None) -> Netlist:
     )
 
 
+def netlist_from_numpy_directory(dir_name: str) -> Netlist:
+    pin_net_cell = np.load(f'{dir_name}/pin_net_cell.npy')
+    cells_pos = np.load(f'{dir_name}/cell_pos.npy')
+    cell_data = np.load(f'{dir_name}/cell_data.npy')
+    net_data = np.load(f'{dir_name}/net_data.npy')
+    pin_data = np.load(f'{dir_name}/pin_data.npy')
+
+    n_cell, n_net = cell_data.shape[0], net_data.shape[0]
+    cells = list(pin_net_cell[:, 1])
+    nets = list(pin_net_cell[:, 0])
+    cells_size = torch.tensor(cell_data[:, [0, 1]], dtype=torch.float32)
+    cells_degree = torch.tensor(cell_data[:, 2], dtype=torch.float32).unsqueeze(-1)
+    nets_degree = torch.tensor(net_data[:, 0], dtype=torch.float32).unsqueeze(-1)
+    pins_pos = torch.tensor(pin_data[:, [0, 1]], dtype=torch.float32)
+    pins_io = torch.tensor(pin_data[:, 2], dtype=torch.float32).unsqueeze(-1)
+
+    # 3. construct graph
+    graph = dgl.heterograph({
+        ('cell', 'pins', 'net'): (cells, nets),
+        ('net', 'pinned', 'cell'): (nets, cells),
+    }, num_nodes_dict={'cell': n_cell, 'net': n_net})
+
+    cells_feat = torch.cat([cells_size / POS_FAC, cells_degree], dim=-1)
+    nets_feat = torch.cat([nets_degree], dim=-1)
+    pins_feat = torch.cat([pins_pos / POS_FAC, pins_io], dim=-1)
+
+    cell_prop_dict = {
+        'size': cells_size,
+        'pos': cells_pos,
+        'feat': cells_feat,
+    }
+    net_prop_dict = {
+        'degree': nets_degree,
+        'feat': nets_feat,
+    }
+    pin_prop_dict = {
+        'pos': pins_pos,
+        'io': pins_io,
+        'feat': pins_feat,
+    }
+
+    return Netlist(
+        graph=graph,
+        cell_prop_dict=cell_prop_dict,
+        net_prop_dict=net_prop_dict,
+        pin_prop_dict=pin_prop_dict
+    )
+
+
 if __name__ == '__main__':
-    netlist = netlist_from_numpy_directory_old('test-old', 900)
+    netlist = netlist_from_numpy_directory('test/dataset1/small')
     print(netlist.graph)
     print(netlist.cell_prop_dict)
     print(netlist.net_prop_dict)

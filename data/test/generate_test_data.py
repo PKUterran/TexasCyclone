@@ -41,10 +41,10 @@ with open('dataset1/dataset.md', 'w+') as fp:
 generate_netlist(
     dataset='dataset1', name='small',
     pin_net_cell=np.array([
-        (1, 1),
+        (0, 0),
+        (0, 1),
+        (0, 0),
         (1, 2),
-        (2, 1),
-        (2, 3),
     ], dtype=np.int),
     cell_pos=np.array([
         [100, 0],
@@ -71,13 +71,13 @@ generate_netlist(
 generate_netlist(
     dataset='dataset1', name='medium',
     pin_net_cell=np.array([
-        (1, 1),
+        (0, 0),
+        (0, 1),
+        (0, 2),
         (1, 2),
         (1, 3),
+        (2, 0),
         (2, 3),
-        (2, 4),
-        (3, 1),
-        (3, 4),
     ], dtype=np.int),
     cell_pos=np.array([
         [200, 0],
