@@ -37,6 +37,7 @@ class Netlist:
         self._pin_net_matrix = None
         self._pin_cell_matrix = None
         self._norm_pin_cell_matrix = None
+        assert self.net_tree is not None
 
         self._net_cell_indices_matrix = None
 
@@ -44,6 +45,13 @@ class Netlist:
     def net_tree(self) -> Tree:
         if self._net_tree is None:
             self._net_tree = generate_net_tree_from_netlist_graph(self.graph)
+            u, v = [], []
+            for i, f in enumerate(self._net_tree.father_list):
+                if f != -1:
+                    u.append(f)
+                    v.append(i)
+            self.graph.add_edges(u, v, etype='father')
+            self.graph.add_edges(v, u, etype='son')
         return self._net_tree
 
     @property
@@ -183,6 +191,8 @@ def netlist_from_numpy_directory_old(dir_name: str, given_iter=None) -> Netlist:
     graph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),
         ('net', 'pinned', 'cell'): (nets, cells),
+        ('net', 'father', 'net'): ([], []),
+        ('net', 'son', 'net'): ([], []),
     }, num_nodes_dict={'cell': n_cell, 'net': n_net})
 
     cells_feat = torch.cat([cells_data, cells_size / POS_FAC, cells_pos / POS_FAC], dim=-1)
@@ -235,6 +245,8 @@ def netlist_from_numpy_directory(dir_name: str) -> Netlist:
     graph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),
         ('net', 'pinned', 'cell'): (nets, cells),
+        ('net', 'father', 'net'): ([], []),
+        ('net', 'son', 'net'): ([], []),
     }, num_nodes_dict={'cell': n_cell, 'net': n_net})
 
     cells_feat = torch.cat([cells_size / POS_FAC, cells_degree], dim=-1)
