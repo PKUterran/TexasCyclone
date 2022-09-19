@@ -31,13 +31,16 @@ class Netlist:
         self.n_pin = graph.num_edges(etype='pinned')
 
         self._net_tree = None
+        self._net_net_pair_matrix = None
+        self._net_cell_pair_matrix = None
+        assert self.net_tree is not None
+
         self._net_offset_pos_matrix = None
         self._net_cell_matrix = None
         self._norm_net_cell_matrix = None
         self._pin_net_matrix = None
         self._pin_cell_matrix = None
         self._norm_pin_cell_matrix = None
-        assert self.net_tree is not None
 
         self._net_cell_indices_matrix = None
 
@@ -53,6 +56,20 @@ class Netlist:
             self.graph.add_edges(u, v, etype='father')
             self.graph.add_edges(v, u, etype='son')
         return self._net_tree
+
+    @property
+    def net_net_pair_matrix(self) -> torch.Tensor:
+        if self._net_net_pair_matrix is None:
+            root_loop_father_list = [(i, f) if f != -1 else (i, i) for i, f in enumerate(self.net_tree.father_list)]
+            self._net_net_pair_matrix = torch.tensor(root_loop_father_list, dtype=torch.int64)
+        return self._net_net_pair_matrix
+
+    @property
+    def net_cell_pair_matrix(self) -> torch.Tensor:
+        if self._net_cell_pair_matrix is None:
+            nets, cells = self.graph.edges(etype='pinned')
+            self._net_cell_pair_matrix = torch.vstack([nets, cells]).t().type(torch.int64)
+        return self._net_cell_pair_matrix
 
     @property
     def net_offset_pos_matrix(self) -> sparse.Tensor:
