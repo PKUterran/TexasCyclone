@@ -21,3 +21,10 @@ def pad_net_cell_list(net_cell_list: List[List[int]], truncate=-1) -> torch.Tens
             net_cell_indices_matrix[i, n_c:max_length] = cell_list[0]
 
     return net_cell_indices_matrix
+
+
+def set_seed(seed: int, use_cuda: bool):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if use_cuda:
+        torch.cuda.manual_seed(seed)
