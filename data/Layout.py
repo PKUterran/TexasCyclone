@@ -66,7 +66,7 @@ def layout_from_netlist_dis_angle(
     pinned_cells_pos = pins_offset + netlist.pin_net_matrix @ net_pos
     cell_pos = netlist.norm_pin_cell_matrix.t() @ pinned_cells_pos
     cell_pos_discrepancy = pinned_cells_pos - netlist.pin_cell_matrix @ cell_pos
-    return Layout(netlist, net_pos, cell_pos), torch.norm(cell_pos_discrepancy)
+    return Layout(netlist, net_pos, cell_pos), torch.mean(torch.norm(cell_pos_discrepancy, dim=1))
 
 
 def layout_from_directory(dir_name: str) -> Layout:

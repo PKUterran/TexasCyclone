@@ -38,4 +38,4 @@ class SampleOverlapLoss(LossFunction):
                                torch.abs(sample_cell_pos_i[:, 0] - sample_cell_pos_j[:, 0]))
         overlap_y = torch.relu((sample_cell_size_i[:, 1] + sample_cell_size_j[:, 1]) / 2 -
                                torch.abs(sample_cell_pos_i[:, 1] - sample_cell_pos_j[:, 1]))
-        return torch.sum(overlap_x * overlap_y)
+        return torch.mean(torch.sqrt(overlap_x * overlap_y))
