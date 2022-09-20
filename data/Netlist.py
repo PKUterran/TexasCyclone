@@ -68,7 +68,7 @@ class Netlist:
     def net_cell_pair_matrix(self) -> torch.Tensor:
         if self._net_cell_pair_matrix is None:
             nets, cells = self.graph.edges(etype='pinned')
-            self._net_cell_pair_matrix = torch.vstack([nets, cells]).t().type(torch.int64)
+            self._net_cell_pair_matrix = torch.vstack([nets, cells]).t().to(torch.int64)
         return self._net_cell_pair_matrix
 
     @property
@@ -239,7 +239,14 @@ def netlist_from_numpy_directory_old(dir_name: str, given_iter=None) -> Netlist:
     )
 
 
-def netlist_from_numpy_directory(dir_name: str) -> Netlist:
+def netlist_from_numpy_directory(dir_name: str, save_type: int = 1) -> Netlist:
+    # 0: ignore cache; 1: use and dump cache; 2: force dump cache
+    print(f'\tLoading {dir_name}')
+    netlist_pickle_path = f'{dir_name}/netlist.pkl'
+    if save_type == 1 and os.path.exists(netlist_pickle_path):
+        with open(netlist_pickle_path, 'rb') as fp:
+            netlist = pickle.load(fp)
+        return netlist
     pin_net_cell = np.load(f'{dir_name}/pin_net_cell.npy')
     cell_data = np.load(f'{dir_name}/cell_data.npy')
     net_data = np.load(f'{dir_name}/net_data.npy')
@@ -258,7 +265,6 @@ def netlist_from_numpy_directory(dir_name: str) -> Netlist:
     pins_pos = torch.tensor(pin_data[:, [0, 1]], dtype=torch.float32)
     pins_io = torch.tensor(pin_data[:, 2], dtype=torch.float32).unsqueeze(-1)
 
-    # 3. construct graph
     graph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),
         ('net', 'pinned', 'cell'): (nets, cells),
@@ -285,23 +291,27 @@ def netlist_from_numpy_directory(dir_name: str) -> Netlist:
         'feat': pins_feat,
     }
 
-    return Netlist(
+    netlist = Netlist(
         graph=graph,
         cell_prop_dict=cell_prop_dict,
         net_prop_dict=net_prop_dict,
         pin_prop_dict=pin_prop_dict
     )
+    if save_type != 0:
+        with open(netlist_pickle_path, 'wb+') as fp:
+            pickle.dump(netlist, fp)
+    return netlist
 
 
-if __name__ == '__main__':
-    netlist = netlist_from_numpy_directory('test/dataset1/small')
-    print(netlist.graph)
-    print(netlist.cell_prop_dict)
-    print(netlist.net_prop_dict)
-    print(netlist.pin_prop_dict)
-    print(netlist.n_cell, netlist.n_net, netlist.n_pin)
-    print(netlist.net_tree.children_dict)
-    print(netlist.net_tree.path_dict)
-    print(netlist.net_offset_pos_matrix.to_dense())
-    print(netlist.pin_net_matrix.to_dense())
-    print(netlist.pin_cell_matrix.to_dense())
+# if __name__ == '__main__':
+#     netlist = netlist_from_numpy_directory('test/dataset1/small')
+#     print(netlist.graph)
+#     print(netlist.cell_prop_dict)
+#     print(netlist.net_prop_dict)
+#     print(netlist.pin_prop_dict)
+#     print(netlist.n_cell, netlist.n_net, netlist.n_pin)
+#     print(netlist.net_tree.children_dict)
+#     print(netlist.net_tree.path_dict)
+#     print(netlist.net_offset_pos_matrix.to_dense())
+#     print(netlist.pin_net_matrix.to_dense())
+#     print(netlist.pin_cell_matrix.to_dense())
