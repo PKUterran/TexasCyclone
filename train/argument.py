@@ -50,19 +50,19 @@ def parse_train_args() -> argparse.Namespace:
         help='learning rate'
     )
     args_parser.add_argument(
-        '--lr_decay', type=float, default=1e-3,
+        '--lr_decay', type=float, default=5e-2,
         help='learning rate decay'
     )
     args_parser.add_argument(
-        '--weight_decay', type=float, default=1e-3,
+        '--weight_decay', type=float, default=5e-4,
         help='weight decay'
     )
     args_parser.add_argument(
-        '--epochs', type=int, default=100,
+        '--epochs', type=int, default=20,
         help='epochs'
     )
     args_parser.add_argument(
-        '--train_epoch', type=int, default=1,
+        '--train_epoch', type=int, default=5,
         help='times of iterating train set per epoch'
     )
     args_parser.add_argument(
@@ -70,7 +70,7 @@ def parse_train_args() -> argparse.Namespace:
         help='# of netlists in a batch'
     )
     args_parser.add_argument(
-        '--dis_lambda', type=float, default=1,
+        '--dis_lambda', type=float, default=1e-1,
         help='weight of discrepancy loss'
     )
     args_parser.add_argument(

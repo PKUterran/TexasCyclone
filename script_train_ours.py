@@ -7,12 +7,14 @@ FIG_DIR = 'visualize/ours'
 MODEL_DIR = 'model'
 train_datasets = [
     '../Placement-datasets/dac2012/superblue2',
+    '../Placement-datasets/dac2012/superblue3',
+    '../Placement-datasets/dac2012/superblue6',
 ]
 valid_datasets = [
-    # '../Placement-datasets/dac2012/superblue2',
+    '../Placement-datasets/dac2012/superblue7',
 ]
 test_datasets = [
-    # '../Placement-datasets/dac2012/superblue2',
+    '../Placement-datasets/dac2012/superblue9',
 ]
 
 if __name__ == '__main__':
