@@ -74,16 +74,20 @@ def parse_train_args() -> argparse.Namespace:
         help='weight of discrepancy loss'
     )
     args_parser.add_argument(
-        '--hpwl_lambda', type=float, default=1e-3,
-        help='weight of HPWL loss'
+        '--overlap_lambda', type=float, default=1,
+        help='weight of overlap loss'
     )
     args_parser.add_argument(
         '--area_lambda', type=float, default=1,
         help='weight of area loss'
     )
     args_parser.add_argument(
-        '--overlap_lambda', type=float, default=1,
-        help='weight of overlap loss'
+        '--hpwl_lambda', type=float, default=1e-3,
+        help='weight of HPWL loss'
+    )
+    args_parser.add_argument(
+        '--cong_lambda', type=float, default=1e-3,
+        help='weight of congestion loss'
     )
 
     args = args_parser.parse_args()
