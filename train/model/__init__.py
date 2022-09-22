@@ -1,0 +1,1 @@
+from .NaiveGNN import NaiveGNN

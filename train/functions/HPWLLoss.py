@@ -12,4 +12,4 @@ class HPWLLoss(LossFunction):
     def forward(self, layout: Layout, *args, **kwargs) -> torch.Tensor:
         net_span = layout.net_span
         net_wl = net_span @ self.cal_vector
-        return torch.sum(net_wl)
+        return torch.mean(net_wl)

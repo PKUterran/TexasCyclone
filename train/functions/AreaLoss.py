@@ -15,4 +15,4 @@ class AreaLoss(LossFunction):
             torch.tensor(limit[:2], dtype=torch.float32) - cell_span[:, :2],
             cell_span[:, 2:] - torch.tensor(limit[2:], dtype=torch.float32),
         ], dim=-1))
-        return torch.sum(cell_span_excess)
+        return torch.mean(cell_span_excess)
