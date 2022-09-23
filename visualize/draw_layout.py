@@ -8,7 +8,7 @@ from data.Netlist import netlist_from_numpy_directory_old
 from data.Layout import Layout, layout_from_netlist_dis_angle
 
 
-def draw_layout(layout: Layout, title='default', directory='visualize/layouts'):
+def draw_detailed_layout(layout: Layout, title='default', directory='visualize/layouts'):
     if not os.path.isdir(directory):
         os.mkdir(directory)
     net_pos = layout.net_pos
@@ -51,4 +51,4 @@ if __name__ == '__main__':
         torch.tensor([-1, 0.5, -0.5, -0.8, 1.5, 1.3, 1.7], dtype=torch.float32),
     )
     print(d_loss)
-    draw_layout(layout_, directory='layouts')
+    draw_detailed_layout(layout_, directory='layouts')
