@@ -121,7 +121,7 @@ def train_ours(
             iter_name_netlist = tqdm(zip(netlist_names, netlists), total=n_netlist) \
                 if use_tqdm else zip(netlist_names, netlists)
             for netlist_name, netlist in iter_name_netlist:
-                print(f'\tFor {dataset_name}:')
+                print(f'\tFor {netlist_name}:')
                 layout, dis_loss = forward(netlist)
                 overlap_loss = overlap_loss_op.forward(layout)
                 # area_loss = area_loss_op.forward(layout, limit=)
@@ -149,7 +149,7 @@ def train_ours(
                     f'{dataset_name}_loss': float(loss.data),
                 }
                 ds.append(d)
-                evaluate_cell_pos_dict[dataset_name] = layout.cell_pos.cpu().detach().numpy()
+                evaluate_cell_pos_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy()
 
             logs[-1].update(mean_dict(ds))
             return logs[-1][f'{dataset_name}_loss']
