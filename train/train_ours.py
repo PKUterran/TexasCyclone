@@ -9,9 +9,11 @@ from tqdm import tqdm
 from data.Netlist import Netlist, netlist_from_numpy_directory, netlist_from_numpy_directory_old
 from data.Layout import Layout, layout_from_netlist_dis_angle, layout_from_directory
 from data.utils import set_seed, mean_dict
-from train.model import NaiveGNN
+from train.model import NaiveGNN,SimpleGNN
 from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss
 
+from visualize.draw_net_tree import draw_big_cell
+from visualize.draw_layout import draw_layout
 
 def train_ours(
         args: argparse.Namespace,
@@ -47,10 +49,14 @@ def train_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
+        'NUM_LAYERS':args.num_layers,
     }
 
     if args.gnn == 'naive':
         model = NaiveGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
+    elif args.gnn == 'simple':
+        device = config['DEVICE']
+        model = SimpleGNN(raw_cell_feats,raw_net_feats,raw_pin_feats,config)
     else:
         assert False, f'Undefined GNN {args.gnn}'
 
@@ -139,6 +145,8 @@ def train_ours(
                     f'{dataset_name}_loss': float(loss.data),
                 }
                 ds.append(d)
+
+                # draw_big_cell(layout,0,netlist_name.split('/')[-1],directory=fig_dir)#现在画出全部cell大约要5min
 
                 if model_dir is not None and dataset_name == 'valid':
                     loss = d[f'{dataset_name}_loss']

@@ -43,6 +43,10 @@ def parse_train_args() -> argparse.Namespace:
         '--pin_feats', type=int, default=8,
         help='hidden dim of pin features'
     )
+    args_parser.add_argument(
+        '--num_layers', type=int, default=3,
+        help='layer number of gnn model'
+    )
 
     # Training settings
     args_parser.add_argument(
