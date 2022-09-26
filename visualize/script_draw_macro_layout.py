@@ -44,6 +44,9 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None):
             ))
 
         plt.savefig(f'{directory}/{fig_path}')
+        
+        if copy_dir and not os.path.isdir(copy_dir):
+            os.mkdir(copy_dir)
         plt.savefig(f'{copy_dir}/{directory.split("/")[-1]}-{fig_path}')
 
 
