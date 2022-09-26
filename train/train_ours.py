@@ -56,6 +56,7 @@ def train_ours(
         assert False, f'Undefined GNN {args.gnn}'
 
     if args.model:
+        print(f'\tUsing model model/{args.model}.pkl')
         model_dicts = torch.load(f'model/{args.model}.pkl', map_location=device)
         model.load_state_dict(model_dicts)
         model.eval()

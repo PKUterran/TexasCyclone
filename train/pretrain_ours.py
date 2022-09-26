@@ -91,11 +91,15 @@ def pretrain_ours(
                 if use_tqdm else enumerate(list_netlist_dis_angle)
             for j, (netlist, dis_angle) in iter_i_netlist_dis_angle:
                 net_dis, net_angle, pin_dis, pin_angle = forward(netlist)
+                net_dis_loss = F.mse_loss(net_dis, dis_angle[0]) ** 0.5
+                net_angle_loss = F.mse_loss(net_angle, dis_angle[1]) ** 0.5
+                pin_dis_loss = F.mse_loss(pin_dis, dis_angle[2]) ** 0.5
+                pin_angle_loss = F.mse_loss(pin_angle, dis_angle[3]) ** 0.5
                 loss = sum((
-                    F.mse_loss(net_dis, dis_angle[0]) * 1.0,
-                    F.mse_loss(net_angle, dis_angle[1]) * 1.0,
-                    F.mse_loss(pin_dis, dis_angle[2]) * 1.0,
-                    F.mse_loss(pin_angle, dis_angle[3]) * 1.0,
+                    net_dis_loss * 0.001,
+                    net_angle_loss * 0.1,
+                    pin_dis_loss * 0.001,
+                    pin_angle_loss * 0.1,
                 ))
                 losses.append(loss)
                 if len(losses) >= args.batch or j == n_netlist - 1:
@@ -115,15 +119,15 @@ def pretrain_ours(
             for netlist_name, (netlist, dis_angle) in iter_i_netlist_dis_angle:
                 print(f'\tFor {netlist_name}:')
                 net_dis, net_angle, pin_dis, pin_angle = forward(netlist)
-                net_dis_loss = F.mse_loss(net_dis, dis_angle[0])
-                net_angle_loss = F.mse_loss(net_angle, dis_angle[1])
-                pin_dis_loss = F.mse_loss(pin_dis, dis_angle[2])
-                pin_angle_loss = F.mse_loss(pin_angle, dis_angle[3])
+                net_dis_loss = F.mse_loss(net_dis, dis_angle[0]) ** 0.5
+                net_angle_loss = F.mse_loss(net_angle, dis_angle[1]) ** 0.5
+                pin_dis_loss = F.mse_loss(pin_dis, dis_angle[2]) ** 0.5
+                pin_angle_loss = F.mse_loss(pin_angle, dis_angle[3]) ** 0.5
                 loss = sum((
-                    net_dis_loss * 1.0,
-                    net_angle_loss * 1.0,
-                    pin_dis_loss * 1.0,
-                    pin_angle_loss * 1.0,
+                    net_dis_loss * 0.001,
+                    net_angle_loss * 0.1,
+                    pin_dis_loss * 0.001,
+                    pin_angle_loss * 0.1,
                 ))
                 print(f'\t\tNet Distance Loss: {net_dis_loss.data}')
                 print(f'\t\tNet Angle Loss: {net_angle_loss.data}')
