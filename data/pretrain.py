@@ -1,5 +1,6 @@
 import pickle
 import torch
+import numpy as np
 from typing import Tuple
 
 import os, sys
@@ -20,9 +21,9 @@ def dump_pretrain_data(dir_name: str):
     pin_rel_pos = layout.cell_pos[cells, :] - layout.net_pos[nets, :]
 
     net_dis = torch.norm(net_rel_pos, dim=1)
-    net_angle = torch.arctan(net_rel_pos[:, 1] / net_rel_pos[:, 0])
+    net_angle = torch.tensor(np.arctan2(net_rel_pos[:, 1], net_rel_pos[:, 0]) / np.pi, dtype=torch.float32)
     pin_dis = torch.norm(pin_rel_pos, dim=1)
-    pin_angle = torch.arctan(pin_rel_pos[:, 1] / pin_rel_pos[:, 0])
+    pin_angle = torch.tensor(np.arctan2(pin_rel_pos[:, 1], pin_rel_pos[:, 0]) / np.pi, dtype=torch.float32)
     with open(f'{dir_name}/{TOKEN}.pkl', 'wb+') as fp:
         pickle.dump((net_dis, net_angle, pin_dis, pin_angle), fp)
 
