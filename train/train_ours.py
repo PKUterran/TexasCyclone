@@ -7,8 +7,8 @@ from functools import reduce
 from time import time
 from tqdm import tqdm
 
-from data.Netlist import Netlist, netlist_from_numpy_directory, netlist_from_numpy_directory_old
-from data.Layout import Layout, layout_from_netlist_dis_angle, layout_from_directory
+from data.Netlist import Netlist, netlist_from_numpy_directory
+from data.Layout import Layout, layout_from_netlist_dis_angle
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
 from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, SampleNetOverlapLoss
