@@ -99,13 +99,13 @@ def train_ours(
                 overlap_loss = overlap_loss_op.forward(layout)
                 # area_loss = area_loss_op.forward(layout, limit=)
                 hpwl_loss = hpwl_loss_op.forward(layout)
-                cong_loss = cong_loss_op.forward(layout)
+#                 cong_loss = cong_loss_op.forward(layout)
                 loss = sum((
                     args.dis_lambda * dis_loss,
                     args.overlap_lambda * overlap_loss,
                     # args.area_lambda * area_loss,
                     args.hpwl_lambda * hpwl_loss,
-                    args.cong_lambda * cong_loss,
+#                     args.cong_lambda * cong_loss,
                 ))
                 losses.append(loss)
                 if len(losses) >= args.batch or j == n_netlist - 1:
@@ -133,7 +133,7 @@ def train_ours(
                     args.overlap_lambda * overlap_loss,
                     # args.area_lambda * area_loss,
                     args.hpwl_lambda * hpwl_loss,
-                    args.cong_lambda * cong_loss,
+#                     args.cong_lambda * cong_loss,
                 ))
                 print(f'\t\tDiscrepancy Loss: {dis_loss.data}')
                 print(f'\t\tOverlap Loss: {overlap_loss.data}')
