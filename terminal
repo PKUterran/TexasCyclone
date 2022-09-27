@@ -1,0 +1,6 @@
+# pretrain
+python script_pretrain_ours.py
+
+# train
+python script_train_ours.py
+python script_train_ours.py --name xpre --model ""

@@ -4,7 +4,7 @@ import os, sys
 sys.path.append(os.path.abspath('.'))
 from data.Netlist import netlist_from_numpy_directory_old, netlist_from_numpy_directory
 from data.Layout import layout_from_netlist_dis_angle, layout_from_directory
-from visualize.draw_layout import draw_layout
+from visualize.draw_layout import draw_detailed_layout
 from train.functions import HPWLLoss, AreaLoss, SampleOverlapLoss
 
 

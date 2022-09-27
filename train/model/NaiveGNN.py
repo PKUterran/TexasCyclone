@@ -70,8 +70,8 @@ class NaiveGNN(nn.Module):
             hidden_pin_feat,
             hidden_cell_feat[net_cell_pair_matrix[:, 1], :],
         ], dim=-1)
-        net_dis = F.softplus(self.net_dis_readout(hidden_net_pair_feat)).view(-1)
+        net_dis = torch.exp(self.net_dis_readout(hidden_net_pair_feat)).view(-1)
         net_angle = self.net_angle_readout(hidden_net_pair_feat).view(-1)
-        pin_dis = F.softplus(self.pin_dis_readout(hidden_net_pin_cell_feat)).view(-1)
+        pin_dis = torch.exp(self.pin_dis_readout(hidden_net_pin_cell_feat)).view(-1)
         pin_angle = self.pin_angle_readout(hidden_net_pin_cell_feat).view(-1)
         return net_dis, net_angle, pin_dis, pin_angle

@@ -30,6 +30,7 @@ class Layout:
 
     @property
     def cell_pos(self) -> Optional[torch.Tensor]:
+        assert self._cell_pos is not None
         return self._cell_pos
 
     @property
@@ -69,8 +70,8 @@ def layout_from_netlist_dis_angle(
     return Layout(netlist, net_pos, cell_pos), torch.mean(torch.norm(cell_pos_discrepancy, dim=1))
 
 
-def layout_from_directory(dir_name: str) -> Layout:
-    netlist = netlist_from_numpy_directory(dir_name)
+def layout_from_directory(dir_name: str, save_type: int = 1) -> Layout:
+    netlist = netlist_from_numpy_directory(dir_name, save_type=save_type)
     return Layout(netlist, None, torch.tensor(netlist.cell_prop_dict['pos'], dtype=torch.float32))
 
 

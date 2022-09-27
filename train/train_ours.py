@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import torch
 import json
 from typing import List, Dict, Any, Tuple
@@ -6,11 +7,11 @@ from functools import reduce
 from time import time
 from tqdm import tqdm
 
-from data.Netlist import Netlist, netlist_from_numpy_directory, netlist_from_numpy_directory_old
-from data.Layout import Layout, layout_from_netlist_dis_angle, layout_from_directory
+from data.Netlist import Netlist, netlist_from_numpy_directory
+from data.Layout import Layout, layout_from_netlist_dis_angle
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
-from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss
+from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, SampleNetOverlapLoss
 
 
 def train_ours(
@@ -55,6 +56,7 @@ def train_ours(
         assert False, f'Undefined GNN {args.gnn}'
 
     if args.model:
+        print(f'\tUsing model model/{args.model}.pkl')
         model_dicts = torch.load(f'model/{args.model}.pkl', map_location=device)
         model.load_state_dict(model_dicts)
         model.eval()
@@ -68,10 +70,12 @@ def train_ours(
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=(1 - args.lr_decay))
 
     # Train model
-    best_loss = 1e8
-    hpwl_loss_op = HPWLLoss()
-    # area_loss_op = AreaLoss()
+    best_metric = 1e8  # lower is better
+    evaluate_cell_pos_dict = {}
     overlap_loss_op = SampleOverlapLoss(span=4)
+    # area_loss_op = AreaLoss()
+    hpwl_loss_op = HPWLLoss()
+    cong_loss_op = SampleNetOverlapLoss(device, span=4)
 
     for epoch in range(0, args.epochs + 1):
         print(f'##### EPOCH {epoch} #####')
@@ -92,14 +96,16 @@ def train_ours(
                 if use_tqdm else enumerate(netlists)
             for j, netlist in iter_i_netlist:
                 layout, dis_loss = forward(netlist)
-                hpwl_loss = hpwl_loss_op.forward(layout)
-                # area_loss = area_loss_op.forward(layout, limit=)
                 overlap_loss = overlap_loss_op.forward(layout)
+                # area_loss = area_loss_op.forward(layout, limit=)
+                hpwl_loss = hpwl_loss_op.forward(layout)
+#                 cong_loss = cong_loss_op.forward(layout)
                 loss = sum((
                     args.dis_lambda * dis_loss,
-                    args.hpwl_lambda * hpwl_loss,
-                    # args.area_lambda * area_loss,
                     args.overlap_lambda * overlap_loss,
+                    # args.area_lambda * area_loss,
+                    args.hpwl_lambda * hpwl_loss,
+#                     args.cong_lambda * cong_loss,
                 ))
                 losses.append(loss)
                 if len(losses) >= args.batch or j == n_netlist - 1:
@@ -108,7 +114,7 @@ def train_ours(
                     losses.clear()
             print(f"\tTraining time per epoch: {time() - t1}")
 
-        def evaluate(netlists: List[Netlist], dataset_name: str, netlist_names: List[str], verbose=True):
+        def evaluate(netlists: List[Netlist], dataset_name: str, netlist_names: List[str], verbose=True) -> float:
             model.eval()
             ds = []
             print(f'\tEvaluate {dataset_name}:')
@@ -116,39 +122,38 @@ def train_ours(
             iter_name_netlist = tqdm(zip(netlist_names, netlists), total=n_netlist) \
                 if use_tqdm else zip(netlist_names, netlists)
             for netlist_name, netlist in iter_name_netlist:
+                print(f'\tFor {netlist_name}:')
                 layout, dis_loss = forward(netlist)
-                hpwl_loss = hpwl_loss_op.forward(layout)
-                # area_loss = area_loss_op.forward(layout, limit=)
                 overlap_loss = overlap_loss_op.forward(layout)
+                # area_loss = area_loss_op.forward(layout, limit=)
+                hpwl_loss = hpwl_loss_op.forward(layout)
+                cong_loss = cong_loss_op.forward(layout)
                 loss = sum((
                     args.dis_lambda * dis_loss,
-                    args.hpwl_lambda * hpwl_loss,
-                    # args.area_lambda * area_loss,
                     args.overlap_lambda * overlap_loss,
+                    # args.area_lambda * area_loss,
+                    args.hpwl_lambda * hpwl_loss,
+#                     args.cong_lambda * cong_loss,
                 ))
                 print(f'\t\tDiscrepancy Loss: {dis_loss.data}')
-                print(f'\t\tHPWL Loss: {hpwl_loss.data}')
-                # print(f'\t\tArea Loss: {area_loss.data}')
                 print(f'\t\tOverlap Loss: {overlap_loss.data}')
+                # print(f'\t\tArea Loss: {area_loss.data}')
+                print(f'\t\tHPWL Loss: {hpwl_loss.data}')
+                print(f'\t\tCongestion Loss: {cong_loss.data}')
                 print(f'\t\tTotal Loss: {loss.data}')
                 d = {
                     f'{dataset_name}_dis_loss': float(dis_loss.data),
-                    f'{dataset_name}_hpwl_loss': float(hpwl_loss.data),
-                    # f'{dataset_name}_area_loss': float(area_loss.data),
                     f'{dataset_name}_overlap_loss': float(overlap_loss.data),
+                    # f'{dataset_name}_area_loss': float(area_loss.data),
+                    f'{dataset_name}_hpwl_loss': float(hpwl_loss.data),
+                    f'{dataset_name}_cong_loss': float(cong_loss.data),
                     f'{dataset_name}_loss': float(loss.data),
                 }
                 ds.append(d)
-
-                if model_dir is not None and dataset_name == 'valid':
-                    loss = d[f'{dataset_name}_loss']
-                    nonlocal best_loss
-                    if loss < best_loss:
-                        best_loss = loss
-                        print(f'\tSaving model to {model_dir}/{args.name}.pkl ...:')
-                        torch.save(model.state_dict(), f'{model_dir}/{args.name}.pkl')
+                evaluate_cell_pos_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy()
 
             logs[-1].update(mean_dict(ds))
+            return logs[-1][f'{dataset_name}_loss']
 
         t0 = time()
         if epoch:
@@ -157,11 +162,22 @@ def train_ours(
                 scheduler.step()
         logs[-1].update({'train_time': time() - t0})
         t2 = time()
+        valid_metric = None
         evaluate(train_netlists, 'train', train_datasets, verbose=False)
         if len(valid_netlists):
-            evaluate(valid_netlists, 'valid', valid_datasets)
+            valid_metric = evaluate(valid_netlists, 'valid', valid_datasets)
         if len(test_netlists):
             evaluate(test_netlists, 'test', test_datasets)
+
+        if valid_metric is not None and valid_metric < best_metric:
+            best_metric = valid_metric
+            for dataset, cell_pos in evaluate_cell_pos_dict.items():
+                print(f'\tSaving cell positions to {dataset}/output-{args.name}.npy ...:')
+                np.save(f'{dataset}/output-{args.name}.npy', cell_pos)
+            evaluate_cell_pos_dict.clear()
+            if model_dir is not None:
+                print(f'\tSaving model to {model_dir}/{args.name}.pkl ...:')
+                torch.save(model.state_dict(), f'{model_dir}/{args.name}.pkl')
 
         print("\tinference time", time() - t2)
         logs[-1].update({'eval_time': time() - t2})
