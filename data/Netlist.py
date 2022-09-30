@@ -30,6 +30,7 @@ class Netlist:
         self.n_net = graph.num_nodes(ntype='net')
         self.n_pin = graph.num_edges(etype='pinned')
 
+        self._macro_cell_indices = None
         self._net_tree = None
         self._net_net_pair_matrix = None
         self._net_cell_pair_matrix = None
@@ -43,6 +44,13 @@ class Netlist:
         self._norm_pin_cell_matrix = None
 
         self._net_cell_indices_matrix = None
+
+    @property
+    def macro_cell_indices(self) -> List[int]:
+        if self._macro_cell_indices is not None:
+            assert 'type' in self.cell_prop_dict.keys()
+            self._macro_cell_indices = list(np.argwhere(self.cell_prop_dict['type'][:, 0] > 0).reshape([-1]))
+        return self._macro_cell_indices
 
     @property
     def net_tree(self) -> Tree:
@@ -261,6 +269,7 @@ def netlist_from_numpy_directory(dir_name: str, save_type: int = 1) -> Netlist:
     nets = list(pin_net_cell[:, 0])
     cells_size = torch.tensor(cell_data[:, [0, 1]], dtype=torch.float32)
     cells_degree = torch.tensor(cell_data[:, 2], dtype=torch.float32).unsqueeze(-1)
+    cells_type = torch.tensor(cell_data[:, 3], dtype=torch.float32).unsqueeze(-1)
     nets_degree = torch.tensor(net_data, dtype=torch.float32).unsqueeze(-1)
     pins_pos = torch.tensor(pin_data[:, [0, 1]], dtype=torch.float32)
     pins_io = torch.tensor(pin_data[:, 2], dtype=torch.float32).unsqueeze(-1)
@@ -280,6 +289,7 @@ def netlist_from_numpy_directory(dir_name: str, save_type: int = 1) -> Netlist:
         'size': cells_size,
         'pos': cells_pos,
         'feat': cells_feat,
+        'type': cells_type,
     }
     net_prop_dict = {
         'degree': nets_degree,
