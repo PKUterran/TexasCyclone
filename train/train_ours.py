@@ -98,8 +98,8 @@ def train_ours(
             for j, netlist in iter_i_netlist:
                 layout, dis_loss = forward(netlist)
                 sample_overlap_loss = sample_overlap_loss_op.forward(layout)
-                macro_overlap_loss = sample_overlap_loss_op.forward(layout)
-                overlap_loss = sample_overlap_loss + macro_overlap_loss
+                macro_overlap_loss = macro_overlap_loss_op.forward(layout)
+                overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
                 # area_loss = area_loss_op.forward(layout, limit=)
                 hpwl_loss = hpwl_loss_op.forward(layout)
 #                 cong_loss = cong_loss_op.forward(layout)
@@ -128,8 +128,8 @@ def train_ours(
                 print(f'\tFor {netlist_name}:')
                 layout, dis_loss = forward(netlist)
                 sample_overlap_loss = sample_overlap_loss_op.forward(layout)
-                macro_overlap_loss = sample_overlap_loss_op.forward(layout)
-                overlap_loss = sample_overlap_loss + macro_overlap_loss
+                macro_overlap_loss = macro_overlap_loss_op.forward(layout)
+                overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
                 # area_loss = area_loss_op.forward(layout, limit=)
                 hpwl_loss = hpwl_loss_op.forward(layout)
                 cong_loss = cong_loss_op.forward(layout)
