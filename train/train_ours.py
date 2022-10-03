@@ -11,7 +11,7 @@ from data.Netlist import Netlist, netlist_from_numpy_directory
 from data.Layout import Layout, layout_from_netlist_dis_angle
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
-from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, SampleNetOverlapLoss
+from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, MacroOverlapLoss, SampleNetOverlapLoss
 
 
 def train_ours(
@@ -72,8 +72,9 @@ def train_ours(
     # Train model
     best_metric = 1e8  # lower is better
     evaluate_cell_pos_dict = {}
-    overlap_loss_op = SampleOverlapLoss(span=4)
-    # area_loss_op = AreaLoss()
+    sample_overlap_loss_op = SampleOverlapLoss(span=4)
+    macro_overlap_loss_op = MacroOverlapLoss(max_cap=50)
+    area_loss_op = AreaLoss()
     hpwl_loss_op = HPWLLoss()
     cong_loss_op = SampleNetOverlapLoss(device, span=4)
 
@@ -96,14 +97,16 @@ def train_ours(
                 if use_tqdm else enumerate(netlists)
             for j, netlist in iter_i_netlist:
                 layout, dis_loss = forward(netlist)
-                overlap_loss = overlap_loss_op.forward(layout)
-                # area_loss = area_loss_op.forward(layout, limit=)
+                sample_overlap_loss = sample_overlap_loss_op.forward(layout)
+                macro_overlap_loss = macro_overlap_loss_op.forward(layout)
+                overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
+                area_loss = area_loss_op.forward(layout, limit=[-5e4, -5e4, 5e4, 5e4])
                 hpwl_loss = hpwl_loss_op.forward(layout)
 #                 cong_loss = cong_loss_op.forward(layout)
                 loss = sum((
                     args.dis_lambda * dis_loss,
                     args.overlap_lambda * overlap_loss,
-                    # args.area_lambda * area_loss,
+                    args.area_lambda * area_loss,
                     args.hpwl_lambda * hpwl_loss,
 #                     args.cong_lambda * cong_loss,
                 ))
@@ -124,27 +127,33 @@ def train_ours(
             for netlist_name, netlist in iter_name_netlist:
                 print(f'\tFor {netlist_name}:')
                 layout, dis_loss = forward(netlist)
-                overlap_loss = overlap_loss_op.forward(layout)
-                # area_loss = area_loss_op.forward(layout, limit=)
+                sample_overlap_loss = sample_overlap_loss_op.forward(layout)
+                macro_overlap_loss = macro_overlap_loss_op.forward(layout)
+                overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
+                area_loss = area_loss_op.forward(layout, limit=[-5e4, -5e4, 5e4, 5e4])
                 hpwl_loss = hpwl_loss_op.forward(layout)
                 cong_loss = cong_loss_op.forward(layout)
                 loss = sum((
                     args.dis_lambda * dis_loss,
                     args.overlap_lambda * overlap_loss,
-                    # args.area_lambda * area_loss,
+                    args.area_lambda * area_loss,
                     args.hpwl_lambda * hpwl_loss,
 #                     args.cong_lambda * cong_loss,
                 ))
                 print(f'\t\tDiscrepancy Loss: {dis_loss.data}')
-                print(f'\t\tOverlap Loss: {overlap_loss.data}')
-                # print(f'\t\tArea Loss: {area_loss.data}')
+                print(f'\t\tSample Overlap Loss: {sample_overlap_loss.data}')
+                print(f'\t\tMacro Overlap Loss: {macro_overlap_loss.data}')
+                print(f'\t\tTotal Overlap Loss: {overlap_loss.data}')
+                print(f'\t\tArea Loss: {area_loss.data}')
                 print(f'\t\tHPWL Loss: {hpwl_loss.data}')
                 print(f'\t\tCongestion Loss: {cong_loss.data}')
                 print(f'\t\tTotal Loss: {loss.data}')
                 d = {
                     f'{dataset_name}_dis_loss': float(dis_loss.data),
+                    f'{dataset_name}_sample_overlap_loss': float(sample_overlap_loss.data),
+                    f'{dataset_name}_macro_overlap_loss': float(macro_overlap_loss.data),
                     f'{dataset_name}_overlap_loss': float(overlap_loss.data),
-                    # f'{dataset_name}_area_loss': float(area_loss.data),
+                    f'{dataset_name}_area_loss': float(area_loss.data),
                     f'{dataset_name}_hpwl_loss': float(hpwl_loss.data),
                     f'{dataset_name}_cong_loss': float(cong_loss.data),
                     f'{dataset_name}_loss': float(loss.data),
@@ -171,13 +180,13 @@ def train_ours(
 
         if valid_metric is not None and valid_metric < best_metric:
             best_metric = valid_metric
-            for dataset, cell_pos in evaluate_cell_pos_dict.items():
-                print(f'\tSaving cell positions to {dataset}/output-{args.name}.npy ...:')
-                np.save(f'{dataset}/output-{args.name}.npy', cell_pos)
-            evaluate_cell_pos_dict.clear()
             if model_dir is not None:
                 print(f'\tSaving model to {model_dir}/{args.name}.pkl ...:')
                 torch.save(model.state_dict(), f'{model_dir}/{args.name}.pkl')
+        for dataset, cell_pos in evaluate_cell_pos_dict.items():
+            print(f'\tSaving cell positions to {dataset}/output-{args.name}.npy ...:')
+            np.save(f'{dataset}/output-{args.name}.npy', cell_pos)
+        evaluate_cell_pos_dict.clear()
 
         print("\tinference time", time() - t2)
         logs[-1].update({'eval_time': time() - t2})

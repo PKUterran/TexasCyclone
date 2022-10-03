@@ -27,6 +27,7 @@ def tendency() -> Dict[str, Any]:
     plt.plot(epochs, train_hpwl_loss, color='blue', linestyle='--')
     plt.plot(epochs, test_hpwl_loss, color='blue', label='HPWL Loss')
 
+    plt.yscale('log')
     plt.legend()
     plt.savefig(fig_path)
 
@@ -35,6 +36,7 @@ def tendency() -> Dict[str, Any]:
 
 TUPLES = [
     ('default', 'ours/default'),
+    ('xpre', 'ours/xpre'),
 ]
 
 
