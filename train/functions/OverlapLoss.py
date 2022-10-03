@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import tqdm
 from typing import Tuple, List
 
 from data.Layout import Layout
@@ -23,9 +24,12 @@ def greedy_sample(layout: Layout, span) -> Tuple[List[int], List[int]]:
 
 def macro_sample(layout: Layout, max_cap) -> Tuple[List[int], List[int]]:
     macro_cell_indices = layout.netlist.macro_cell_indices
+    n_macro = len(macro_cell_indices)
+    max_cap = min(max_cap, n_macro)
     sample_i, sample_j = [], []
     for i in macro_cell_indices:
-        for j in np.random.choice(macro_cell_indices, max_cap):
+#     for i in tqdm.tqdm(macro_cell_indices):
+        for j in macro_cell_indices[:int(max_cap / 2)] + [macro_cell_indices[s] for s in np.random.randint(int(max_cap / 2), n_macro, size=max_cap)]:
             if i != j:
                 sample_i.append(i)
                 sample_j.append(j)

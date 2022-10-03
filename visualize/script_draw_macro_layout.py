@@ -35,6 +35,8 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None):
         ax.set_xlim(min_x - 0.1 * scale_x, max_x + 0.1 * scale_x)
         ax.set_ylim(min_y - 0.1 * scale_y, max_y + 0.1 * scale_y)
 
+        ax.scatter(cell_pos[:, 0], cell_pos[:, 1], c='orange', s=1)
+        
         for i in tqdm(cell_indices):
             ax.add_patch(plt.Rectangle(
                 tuple(cell_pos_corner[i, :].tolist()),
@@ -42,7 +44,7 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None):
                 float(cell_size[i][1]),
                 fill=False, color='red'
             ))
-
+        
         plt.savefig(f'{directory}/{fig_path}')
         
         if copy_dir and not os.path.isdir(copy_dir):
@@ -52,10 +54,10 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None):
 
 DRAW_DIRECTORIES = [
     '../../Placement-datasets/dac2012/superblue2',
-    '../../Placement-datasets/dac2012/superblue3',
-    '../../Placement-datasets/dac2012/superblue6',
-    '../../Placement-datasets/dac2012/superblue7',
-    '../../Placement-datasets/dac2012/superblue9',
+#     '../../Placement-datasets/dac2012/superblue3',
+#     '../../Placement-datasets/dac2012/superblue6',
+#     '../../Placement-datasets/dac2012/superblue7',
+#     '../../Placement-datasets/dac2012/superblue9',
 ]
 
 

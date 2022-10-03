@@ -47,9 +47,10 @@ class Netlist:
 
     @property
     def macro_cell_indices(self) -> List[int]:
-        if self._macro_cell_indices is not None:
+        if self._macro_cell_indices is None:
             assert 'type' in self.cell_prop_dict.keys()
-            self._macro_cell_indices = list(np.argwhere(self.cell_prop_dict['type'][:, 0] > 0).reshape([-1]))
+            macro_cell_indices = list(np.argwhere(self.cell_prop_dict['type'][:, 0] > 0).reshape([-1]))
+            self._macro_cell_indices = list(sorted(macro_cell_indices, key=lambda x: self.cell_prop_dict['size'][x, 0], reverse=True))
         return self._macro_cell_indices
 
     @property
