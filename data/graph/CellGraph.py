@@ -61,6 +61,7 @@ class CellFlow:
             edge_cnt += 1
 
         ## 4.2 Find the paths from terminals to movable cells
+        set_terminals = set(terminals)
         for i, t in enumerate(terminals):
             assert edge_stack.empty()
             edge_stack.put((-1, t))
@@ -80,6 +81,8 @@ class CellFlow:
                 # Sample only one path from each of its father to avoid combination explosion
                 if k[0] == fathers_list[k[1]][0]:
                     for child in dict_cell_children.get(k[1], []):
+                        if child in set_terminals:
+                            continue
                         edge_stack.put((k[1], child))
 
         # time/space complexity: O(D * P)
