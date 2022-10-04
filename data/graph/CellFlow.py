@@ -10,26 +10,26 @@ sys.path.append(os.path.abspath('.'))
 
 
 class CellFlow:
-    def __init__(self, graph: dgl.DGLHeteroGraph, terminals: Sequence[int]):
+    def __init__(self, graph: dgl.DGLHeteroGraph, terminal_indices: Sequence[int]):
         n_net = graph.num_nodes(ntype='net')
         n_cell = graph.num_nodes(ntype='cell')
 
         # 1. Get cell connection
-        list_net_cells: List[Set] = [set() for _ in range(n_net)]
-        list_cell_nets: List[Set] = [set() for _ in range(n_cell)]
+        list_net_cells: List[Set[int]] = [set() for _ in range(n_net)]
+        list_cell_nets: List[Set[int]] = [set() for _ in range(n_cell)]
         for net, cell in zip(*graph.edges(etype='pinned')):
             list_net_cells[int(net)].add(int(cell))
             list_cell_nets[int(cell)].add(int(net))
 
         # 2. Initialize roots of CellFlow
         fathers_list: List[List[int]] = [[] for _ in range(n_cell)]
-        for t in terminals:
+        for t in terminal_indices:
             fathers_list[t].append(-1)
 
         # 3. Expand the flow
         net_flag = [False for _ in range(n_net)]
         cell_queue = queue.Queue()
-        for t in terminals:
+        for t in terminal_indices:
             cell_queue.put(t)
         while not cell_queue.empty():
             cell: int = cell_queue.get()
@@ -56,13 +56,13 @@ class CellFlow:
         edge_stack, temp_path = queue.LifoQueue(), []
 
         ## 4.1 Label the terminals (fixed)
-        for t in terminals:
+        for t in terminal_indices:
             flow_edges.append((-1, t))
             edge_cnt += 1
 
         ## 4.2 Find the paths from terminals to movable cells
-        set_terminals = set(terminals)
-        for i, t in enumerate(terminals):
+        set_terminals = set(terminal_indices)
+        for i, t in enumerate(terminal_indices):
             assert edge_stack.empty()
             edge_stack.put((-1, t))
             while not edge_stack.empty():
