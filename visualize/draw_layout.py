@@ -4,21 +4,20 @@ from matplotlib import pyplot as plt
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
-from data.Netlist import netlist_from_numpy_directory_old
-from data.Layout import Layout, layout_from_netlist_dis_angle
+from data.graph import Netlist, Layout
+from data.load_data import netlist_from_numpy_directory, layout_from_netlist_ref
 
 
 def draw_detailed_layout(layout: Layout, title='default', directory='visualize/layouts'):
     if not os.path.isdir(directory):
         os.mkdir(directory)
-    net_pos = layout.net_pos
     cell_pos = layout.cell_pos
     cell_size = layout.netlist.cell_prop_dict['size']
     cell_pos_corner = cell_pos - cell_size / 2
     fig = plt.figure()
     ax = plt.subplot(111)
-    xs = net_pos[:, 0].tolist() + (cell_pos - cell_size / 2)[:, 0].tolist() + (cell_pos + cell_size / 2)[:, 0].tolist()
-    ys = net_pos[:, 1].tolist() + (cell_pos - cell_size / 2)[:, 1].tolist() + (cell_pos + cell_size / 2)[:, 1].tolist()
+    xs = (cell_pos - cell_size / 2)[:, 0].tolist() + (cell_pos + cell_size / 2)[:, 0].tolist()
+    ys = (cell_pos - cell_size / 2)[:, 1].tolist() + (cell_pos + cell_size / 2)[:, 1].tolist()
     min_x, min_y, max_x, max_y = min(xs), min(ys), max(xs), max(ys)
     scale_x, scale_y = max_x - min_x, max_y - min_y
     ax.set_xlim(min_x - 0.1 * scale_x, max_x + 0.1 * scale_x)
@@ -32,23 +31,13 @@ def draw_detailed_layout(layout: Layout, title='default', directory='visualize/l
             fill=False, color='red'
         ))
 
-    for i in range(layout.netlist.n_net):
-        ax.add_patch(plt.Circle(tuple(net_pos[i, :].tolist()), radius=10, fill=True, color='black'))
-
-    nets, cells = layout.netlist.graph.edges(etype='pinned')
-    for n, c in zip(nets.tolist(), cells.tolist()):
-        ax.plot([net_pos[n, 0], cell_pos[c, 0]], [net_pos[n, 1], cell_pos[c, 1]], color='black')
+    fathers, sons = layout.netlist.graph.edges(etype='points-to')
+    for f, s in zip(fathers.tolist(), sons.tolist()):
+        ax.plot([cell_pos[f, 0], cell_pos[s, 0]], [cell_pos[f, 1], cell_pos[s, 1]], color='black')
 
     plt.savefig(f'{directory}/{title}.png')
 
 
 if __name__ == '__main__':
-    layout_, d_loss = layout_from_netlist_dis_angle(
-        netlist_from_numpy_directory_old('../data/test-old', 900),
-        torch.tensor([400, 400, 400], dtype=torch.float32),
-        torch.tensor([0, 0, -0.25], dtype=torch.float32),
-        torch.tensor([200, 200, 200, 450, 200, 200, 200], dtype=torch.float32),
-        torch.tensor([-1, 0.5, -0.5, -0.8, 1.5, 1.3, 1.7], dtype=torch.float32),
-    )
-    print(d_loss)
+    layout_ = layout_from_netlist_ref(netlist_from_numpy_directory('../data/test/dataset1/medium'))
     draw_detailed_layout(layout_, directory='layouts')

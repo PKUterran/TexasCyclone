@@ -1,8 +1,10 @@
+import json
 import numpy as np
 import torch
 import pickle
 import dgl
-from typing import Optional, List, Tuple
+from typing import Tuple
+from copy import deepcopy
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
@@ -12,7 +14,6 @@ from data.graph.Layout import Layout
 
 def netlist_from_numpy_directory(
         dir_name: str,
-        cell_clusters: Optional[List[List[int]]] = None,
         save_type: int = 1
 ) -> Netlist:
     # 0: ignore cache; 1: use and dump cache; 2: force dump cache
@@ -32,6 +33,16 @@ def netlist_from_numpy_directory(
         cells_pos = np.load(f'{dir_name}/cell_pos.npy')
     else:
         cells_pos = np.zeros(shape=[n_cell, 2], dtype=np.float)
+    if os.path.exists(f'{dir_name}/cell_clusters.json'):
+        with open(f'{dir_name}/cell_clusters.json') as fp:
+            cell_clusters = json.load(fp)
+    else:
+        cell_clusters = None
+    if os.path.exists(f'{dir_name}/layout_size.json'):
+        with open(f'{dir_name}/layout_size.json') as fp:
+            layout_size = json.load(fp)
+    else:
+        layout_size = None
     cells = list(pin_net_cell[:, 1])
     nets = list(pin_net_cell[:, 0])
     cells_ref_pos = torch.tensor(cells_pos, dtype=torch.float32)
@@ -47,8 +58,8 @@ def netlist_from_numpy_directory(
     graph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),
         ('net', 'pinned', 'cell'): (nets, cells),
-        ('net', 'father', 'net'): ([], []),
-        ('net', 'son', 'net'): ([], []),
+        ('cell', 'points-to', 'cell'): ([], []),
+        ('cell', 'pointed-from', 'cell'): ([], []),
     }, num_nodes_dict={'cell': n_cell, 'net': n_net})
 
     cells_feat = torch.cat([torch.log(cells_size), cells_degree], dim=-1)
@@ -56,6 +67,7 @@ def netlist_from_numpy_directory(
     pins_feat = torch.cat([pins_pos / 1000, pins_io], dim=-1)
 
     cell_prop_dict = {
+        'ref_pos': cells_ref_pos,
         'pos': cells_pos,
         'size': cells_size,
         'feat': cells_feat,
@@ -82,9 +94,16 @@ def netlist_from_numpy_directory(
         cell_prop_dict=cell_prop_dict,
         net_prop_dict=net_prop_dict,
         pin_prop_dict=pin_prop_dict,
+        layout_size=layout_size,
         hierarchical=cell_clusters is not None,
         cell_clusters=cell_clusters,
-        dreamplace_pos=cells_ref_pos,
+        original_netlist=Netlist(
+            graph=deepcopy(graph),
+            cell_prop_dict=deepcopy(cell_prop_dict),
+            net_prop_dict=deepcopy(net_prop_dict),
+            pin_prop_dict=deepcopy(pin_prop_dict),
+            layout_size=layout_size,
+        )
     )
     if save_type != 0:
         with open(netlist_pickle_path, 'wb+') as fp:
@@ -105,31 +124,41 @@ def layout_from_netlist_dis_angle(
     return Layout(netlist, cell_pos), torch.mean(torch.norm(path_pos_discrepancy, dim=1))
 
 
+def layout_from_netlist_cell_pos(netlist: Netlist, cell_pos: torch.Tensor):
+    return Layout(netlist, cell_pos)
+
+
+def layout_from_netlist_ref(netlist: Netlist) -> Layout:
+    return Layout(netlist, netlist.cell_prop_dict['ref_pos'])
+
+
 if __name__ == '__main__':
-    netlist_ = netlist_from_numpy_directory('test/dataset1/medium', cell_clusters=[[2, 3]], save_type=2)
+    netlist_ = netlist_from_numpy_directory('test/dataset1/medium', save_type=2)
     print(netlist_.graph)
-    # print(netlist_.cell_prop_dict)
-    # print(netlist_.net_prop_dict)
-    # print(netlist_.pin_prop_dict)
+    print(netlist_.cell_prop_dict)
+    print(netlist_.net_prop_dict)
+    print(netlist_.pin_prop_dict)
     print(netlist_.n_cell, netlist_.n_net, netlist_.n_pin)
     print(netlist_.cell_flow.fathers_list)
-    for _, edges in enumerate(netlist_.cell_flow.flow_edges):
+    for _, edges in enumerate(netlist_.cell_flow.flow_edge_indices):
         print(f'{_}: {edges}')
     print(netlist_.cell_flow.cell_paths)
     print(netlist_.cell_path_edge_matrix.to_dense().numpy())
     print(netlist_.path_cell_matrix.to_dense().numpy())
     print(netlist_.path_edge_matrix.to_dense().numpy())
+    print(netlist_.graph.edges(etype='points-to'))
     for k, v in netlist_.dict_sub_netlist.items():
         print(f'{k}:')
         print('\t', v.graph)
-        # print('\t', v.cell_prop_dict)
-        # print('\t', v.net_prop_dict)
-        # print('\t', v.pin_prop_dict)
+        print('\t', v.cell_prop_dict)
+        print('\t', v.net_prop_dict)
+        print('\t', v.pin_prop_dict)
         print('\t', v.n_cell, v.n_net, v.n_pin)
         print('\t', v.cell_flow.fathers_list)
-        for _, edges in enumerate(v.cell_flow.flow_edges):
+        for _, edges in enumerate(v.cell_flow.flow_edge_indices):
             print('\t', f'{_}: {edges}')
         print('\t', v.cell_flow.cell_paths)
         print(v.cell_path_edge_matrix.to_dense().numpy())
         print(v.path_cell_matrix.to_dense().numpy())
         print(v.path_edge_matrix.to_dense().numpy())
+        print(v.graph.edges(etype='points-to'))

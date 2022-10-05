@@ -1,13 +1,13 @@
 import torch
 
-from data.Layout import Layout
+from data.graph import Layout
 from .LossFunction import LossFunction
 
 
 class HPWLLoss(LossFunction):
-    def __init__(self):
+    def __init__(self, device):
         super(HPWLLoss, self).__init__()
-        self.cal_vector = torch.tensor([-1, -1, 1, 1], dtype=torch.float32)
+        self.cal_vector = torch.tensor([-1, -1, 1, 1], dtype=torch.float32).to(device)
 
     def forward(self, layout: Layout, *args, **kwargs) -> torch.Tensor:
         net_span = layout.net_span

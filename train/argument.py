@@ -66,7 +66,7 @@ def parse_train_args() -> argparse.Namespace:
         help='times of iterating train set per epoch'
     )
     args_parser.add_argument(
-        '--batch', type=int, default=1,
+        '--batch', type=int, default=10,
         help='# of netlists in a batch'
     )
     args_parser.add_argument(
@@ -159,7 +159,7 @@ def parse_pretrain_args() -> argparse.Namespace:
         help='times of iterating train set per epoch'
     )
     args_parser.add_argument(
-        '--batch', type=int, default=1,
+        '--batch', type=int, default=10,
         help='# of netlists in a batch'
     )
 

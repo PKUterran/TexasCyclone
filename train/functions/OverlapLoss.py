@@ -3,7 +3,7 @@ import torch
 import tqdm
 from typing import Tuple, List
 
-from data.Layout import Layout
+from data.graph import Layout
 from .LossFunction import LossFunction
 
 
@@ -23,7 +23,7 @@ def greedy_sample(layout: Layout, span) -> Tuple[List[int], List[int]]:
 
 
 def macro_sample(layout: Layout, max_cap) -> Tuple[List[int], List[int]]:
-    macro_cell_indices = layout.netlist.macro_cell_indices
+    macro_cell_indices = layout.netlist.terminal_indices
     n_macro = len(macro_cell_indices)
     max_cap = min(max_cap, n_macro)
     sample_i, sample_j = [], []
@@ -68,6 +68,8 @@ class MacroOverlapLoss(LossFunction):
 
     def forward(self, layout: Layout, *args, **kwargs) -> torch.Tensor:
         sample_i, sample_j = macro_sample(layout, self.max_cap)
+        if len(sample_i) == 0:
+            return torch.tensor(0.)
         overlap_x, overlap_y = calc_overlap_xy(layout, sample_i, sample_j)
         return torch.mean(torch.sqrt(overlap_x * overlap_y + 1e-3))
 

@@ -1,5 +1,4 @@
 import argparse
-import numpy as np
 import torch
 import torch.nn.functional as F
 import json
@@ -8,9 +7,8 @@ from functools import reduce
 from time import time
 from tqdm import tqdm
 
-from data.Netlist import Netlist
+from data.graph import Netlist, expand_netlist
 from data.pretrain import DIS_ANGLE_TYPE, load_pretrain_data
-from data.Layout import Layout, layout_from_netlist_dis_angle
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
 
@@ -34,9 +32,26 @@ def pretrain_ours(
 
     # Load data
     print(f'Loading data...')
-    train_list_netlist_dis_angle = [load_pretrain_data(dataset) for dataset in train_datasets]
-    valid_list_netlist_dis_angle = [load_pretrain_data(dataset) for dataset in valid_datasets]
-    test_list_netlist_dis_angle = [load_pretrain_data(dataset) for dataset in test_datasets]
+
+    def unpack_netlist_dis_angle(list_netlist_dict_nid_dis_angle: List[Tuple[Netlist, Dict[int, DIS_ANGLE_TYPE]]]
+                                 ) -> List[Tuple[Netlist, DIS_ANGLE_TYPE]]:
+        list_netlist_dis_angle = []
+        for netlist, dict_nid_dis_angle in list_netlist_dict_nid_dis_angle:
+            dict_netlist = expand_netlist(netlist)
+            for nid, sub_nl in dict_netlist.items():
+                list_netlist_dis_angle.append((sub_nl, dict_nid_dis_angle[nid]))
+        return list_netlist_dis_angle
+
+    train_list_netlist_dis_angle = unpack_netlist_dis_angle(
+        [load_pretrain_data(dataset) for dataset in train_datasets])
+    valid_list_netlist_dis_angle = unpack_netlist_dis_angle(
+        [load_pretrain_data(dataset) for dataset in valid_datasets])
+    test_list_netlist_dis_angle = unpack_netlist_dis_angle(
+        [load_pretrain_data(dataset) for dataset in test_datasets])
+    print(f'\t# of samples: '
+          f'{len(train_list_netlist_dis_angle)} train, '
+          f'{len(valid_list_netlist_dis_angle)} valid, '
+          f'{len(test_list_netlist_dis_angle)} test.')
 
     # Configure model
     print(f'Building model...')
@@ -79,27 +94,24 @@ def pretrain_ours(
         logs.append({'epoch': epoch})
 
         def forward(netlist: Netlist) -> DIS_ANGLE_TYPE:
-            net_dis, net_angle, pin_dis, pin_angle = model.forward(netlist)
-            return net_dis, net_angle, pin_dis, pin_angle
+            edge_dis, edge_angle = model.forward(netlist)
+            return edge_dis, edge_angle
 
         def train(list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]]):
             model.train()
             t1 = time()
             losses = []
+
             n_netlist = len(list_netlist_dis_angle)
             iter_i_netlist_dis_angle = tqdm(enumerate(list_netlist_dis_angle), total=n_netlist) \
                 if use_tqdm else enumerate(list_netlist_dis_angle)
             for j, (netlist, dis_angle) in iter_i_netlist_dis_angle:
-                net_dis, net_angle, pin_dis, pin_angle = forward(netlist)
-                net_dis_loss = F.mse_loss(net_dis, dis_angle[0]) ** 0.5
-                net_angle_loss = F.mse_loss(net_angle, dis_angle[1]) ** 0.5
-                pin_dis_loss = F.mse_loss(pin_dis, dis_angle[2]) ** 0.5
-                pin_angle_loss = F.mse_loss(pin_angle, dis_angle[3]) ** 0.5
+                edge_dis, edge_angle = forward(netlist)
+                edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
+                edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
                 loss = sum((
-                    net_dis_loss * 0.001,
-                    net_angle_loss * 0.1,
-                    pin_dis_loss * 0.001,
-                    pin_angle_loss * 0.1,
+                    edge_dis_loss * 0.001,
+                    edge_angle_loss * 0.1,
                 ))
                 losses.append(loss)
                 if len(losses) >= args.batch or j == n_netlist - 1:
@@ -118,27 +130,19 @@ def pretrain_ours(
                 if use_tqdm else zip(netlist_names, list_netlist_dis_angle)
             for netlist_name, (netlist, dis_angle) in iter_i_netlist_dis_angle:
                 print(f'\tFor {netlist_name}:')
-                net_dis, net_angle, pin_dis, pin_angle = forward(netlist)
-                net_dis_loss = F.mse_loss(net_dis, dis_angle[0]) ** 0.5
-                net_angle_loss = F.mse_loss(net_angle, dis_angle[1]) ** 0.5
-                pin_dis_loss = F.mse_loss(pin_dis, dis_angle[2]) ** 0.5
-                pin_angle_loss = F.mse_loss(pin_angle, dis_angle[3]) ** 0.5
+                edge_dis, edge_angle = forward(netlist)
+                edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
+                edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
                 loss = sum((
-                    net_dis_loss * 0.001,
-                    net_angle_loss * 0.1,
-                    pin_dis_loss * 0.001,
-                    pin_angle_loss * 0.1,
+                    edge_dis_loss * 0.001,
+                    edge_angle_loss * 0.1,
                 ))
-                print(f'\t\tNet Distance Loss: {net_dis_loss.data}')
-                print(f'\t\tNet Angle Loss: {net_angle_loss.data}')
-                print(f'\t\tPin Distance Loss: {pin_dis_loss.data}')
-                print(f'\t\tPin Angle Loss: {pin_angle_loss.data}')
+                print(f'\t\tEdge Distance Loss: {edge_dis_loss.data}')
+                print(f'\t\tEdge Angle Loss: {edge_angle_loss.data}')
                 print(f'\t\tTotal Loss: {loss.data}')
                 d = {
-                    f'{dataset_name}_net_dis_loss': float(net_dis_loss.data),
-                    f'{dataset_name}_net_angle_loss': float(net_angle_loss.data),
-                    f'{dataset_name}_pin_dis_loss': float(pin_dis_loss.data),
-                    f'{dataset_name}_pin_angle_loss': float(pin_angle_loss.data),
+                    f'{dataset_name}_net_dis_loss': float(edge_dis_loss.data),
+                    f'{dataset_name}_net_angle_loss': float(edge_angle_loss.data),
                     f'{dataset_name}_loss': float(loss.data),
                 }
                 ds.append(d)

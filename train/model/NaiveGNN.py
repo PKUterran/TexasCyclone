@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Tuple, Dict, Any
 from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv
 
-from data.Netlist import Netlist
+from data.graph import Netlist
 
 
 class NaiveGNN(nn.Module):
@@ -33,20 +32,18 @@ class NaiveGNN(nn.Module):
             'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats),
             'pinned': CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                              hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-            'father': GraphConv(in_feats=self.hidden_net_feats, out_feats=self.hidden_net_feats),
-            'son': GraphConv(in_feats=self.hidden_net_feats, out_feats=self.hidden_net_feats),
+            'points-to': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+            'pointed-from': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
         }, aggregate='max')
 
-        self.net_dis_readout = nn.Linear(2 * self.hidden_net_feats, 1)
-        self.net_angle_readout = nn.Linear(2 * self.hidden_net_feats, 1)
-        self.pin_dis_readout = nn.Linear(self.hidden_cell_feats + self.hidden_pin_feats + self.hidden_net_feats, 1)
-        self.pin_angle_readout = nn.Linear(self.hidden_cell_feats + self.hidden_pin_feats + self.hidden_net_feats, 1)
+        self.edge_dis_readout = nn.Linear(2 * self.hidden_cell_feats, 1)
+        self.edge_angle_readout = nn.Linear(2 * self.hidden_cell_feats, 1)
         self.to(self.device)
 
     def forward(
             self,
             netlist: Netlist
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         cell_feat = netlist.cell_prop_dict['feat'].to(self.device)
         net_feat = netlist.net_prop_dict['feat'].to(self.device)
         pin_feat = netlist.pin_prop_dict['feat'].to(self.device)
@@ -59,19 +56,11 @@ class NaiveGNN(nn.Module):
         h = self.hetero_conv.forward(graph, h, mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})
         hidden_cell_feat, hidden_net_feat = h['cell'], h['net']
 
-        net_net_pair_matrix = netlist.net_net_pair_matrix.to(self.device)
-        net_cell_pair_matrix = netlist.net_cell_pair_matrix.to(self.device)
+        fathers, sons = graph.edges(etype='points-to')
         hidden_net_pair_feat = torch.cat([
-            hidden_net_feat[net_net_pair_matrix[:, 0], :],
-            hidden_net_feat[net_net_pair_matrix[:, 1], :]
+            hidden_cell_feat[fathers, :],
+            hidden_cell_feat[sons, :]
         ], dim=-1)
-        hidden_net_pin_cell_feat = torch.cat([
-            hidden_net_feat[net_cell_pair_matrix[:, 0], :],
-            hidden_pin_feat,
-            hidden_cell_feat[net_cell_pair_matrix[:, 1], :],
-        ], dim=-1)
-        net_dis = torch.exp(self.net_dis_readout(hidden_net_pair_feat)).view(-1)
-        net_angle = self.net_angle_readout(hidden_net_pair_feat).view(-1)
-        pin_dis = torch.exp(self.pin_dis_readout(hidden_net_pin_cell_feat)).view(-1)
-        pin_angle = self.pin_angle_readout(hidden_net_pin_cell_feat).view(-1)
-        return net_dis, net_angle, pin_dis, pin_angle
+        edge_dis = torch.exp(self.edge_dis_readout(hidden_net_pair_feat)).view(-1)
+        edge_angle = self.edge_angle_readout(hidden_net_pair_feat).view(-1)
+        return edge_dis, edge_angle

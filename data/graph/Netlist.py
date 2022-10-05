@@ -21,15 +21,13 @@ class Netlist:
             layout_size: Optional[Tuple[float, float]] = None,
             hierarchical: bool = False,
             cell_clusters: Optional[List[List[int]]] = None,
-            dreamplace_pos: Optional[torch.Tensor] = None
+            original_netlist=None
     ):
         self.graph = graph
         self.cell_prop_dict = cell_prop_dict
         self.net_prop_dict = net_prop_dict
         self.pin_prop_dict = pin_prop_dict
-        self.dreamplace_pos = dreamplace_pos
-        self.original_graph = None
-        self.original_n_cell = graph.num_nodes(ntype='cell')
+        self.original_netlist = original_netlist
         self.dict_sub_netlist = {}
         if hierarchical:
             self.adapt_hierarchy(cell_clusters, use_tqdm=True)
@@ -50,14 +48,16 @@ class Netlist:
             assert len(self.terminal_indices) > 0
 
         self._cell_flow = None
-        self.n_edge = len(self.cell_flow.flow_edges)
+        self.n_edge = len(self.cell_flow.flow_edge_indices)
         self._cell_path_edge_matrix = None
         self._path_cell_matrix = None
         self._path_edge_matrix = None
         self._net_cell_indices_matrix = None
         self.construct_cell_path_edge_matrices()
         self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
-        self.movable_edge_indices = self.cell_flow.flow_edges[len(self.terminal_indices):]
+        fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
+        self.graph.add_edges(fathers, sons, etype='points-to')
+        self.graph.add_edges(sons, fathers, etype='pointed-from')
 
     @property
     def cell_flow(self) -> CellFlow:
@@ -101,12 +101,12 @@ class Netlist:
         if cell_clusters is None:
             cell_clusters = self.get_cell_clusters()
 
-        self.original_graph = self.graph
         temp_n_cell = self.graph.num_nodes(ntype='cell')
         parted_cells = set()
-        pseudo_cells_size = []
-        pseudo_cells_degree = []
-        pseudo_pins_pos = []
+        pseudo_cell_ref_pos = []
+        pseudo_cell_size = []
+        pseudo_cell_degree = []
+        pseudo_pin_pos = []
 
         iter_partition_list = tqdm.tqdm(cell_clusters, total=len(cell_clusters)) if use_tqdm else cell_clusters
         for partition in iter_partition_list:
@@ -135,26 +135,32 @@ class Netlist:
             self.graph.add_nodes(temp_n_cell, ntype='cell')
             self.graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned')
             self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
-            pseudo_cells_size.append(sub_netlist.layout_size)
-            pseudo_cells_degree.append(len(keep_nets_id) - len(good_nets_id))
-            pseudo_pins_pos.extend([[0, 0] for _ in range(len(keep_nets_id))])
+            ref_pos = torch.mean(sub_netlist.cell_prop_dict['ref_pos'], dim=0)
+            sub_netlist.cell_prop_dict['ref_pos'] -= \
+                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32)
+            pseudo_cell_ref_pos.append(ref_pos)
+            pseudo_cell_size.append(sub_netlist.layout_size)
+            pseudo_cell_degree.append(len(keep_nets_id) - len(good_nets_id))
+            pseudo_pin_pos.extend([[0, 0] for _ in range(len(keep_nets_id))])
             temp_n_cell += 1
 
-        pseudo_cells_size = torch.tensor(pseudo_cells_size, dtype=torch.float32)
-        pseudo_cells_pos = torch.full_like(pseudo_cells_size, fill_value=torch.nan)
-        pseudo_cells_degree = torch.tensor(pseudo_cells_degree, dtype=torch.float32).unsqueeze(-1)
-        pseudo_cells_feat = torch.cat([torch.log(pseudo_cells_size), pseudo_cells_degree], dim=-1)
-        self.cell_prop_dict['size'] = torch.vstack([self.cell_prop_dict['size'], pseudo_cells_size])
-        self.cell_prop_dict['pos'] = torch.vstack([self.cell_prop_dict['pos'], pseudo_cells_pos])
-        self.cell_prop_dict['feat'] = torch.vstack([self.cell_prop_dict['feat'], pseudo_cells_feat])
-        self.cell_prop_dict['type'] = torch.vstack([self.cell_prop_dict['type'], torch.zeros_like(pseudo_cells_degree)])
+        pseudo_cell_ref_pos = torch.vstack(pseudo_cell_ref_pos)
+        pseudo_cell_size = torch.tensor(pseudo_cell_size, dtype=torch.float32)
+        pseudo_cell_pos = torch.full_like(pseudo_cell_size, fill_value=torch.nan)
+        pseudo_cell_degree = torch.tensor(pseudo_cell_degree, dtype=torch.float32).unsqueeze(-1)
+        pseudo_cell_feat = torch.cat([torch.log(pseudo_cell_size), pseudo_cell_degree], dim=-1)
+        self.cell_prop_dict['ref_pos'] = torch.vstack([self.cell_prop_dict['ref_pos'], pseudo_cell_ref_pos])
+        self.cell_prop_dict['size'] = torch.vstack([self.cell_prop_dict['size'], pseudo_cell_size])
+        self.cell_prop_dict['pos'] = torch.vstack([self.cell_prop_dict['pos'], pseudo_cell_pos])
+        self.cell_prop_dict['feat'] = torch.vstack([self.cell_prop_dict['feat'], pseudo_cell_feat])
+        self.cell_prop_dict['type'] = torch.vstack([self.cell_prop_dict['type'], torch.zeros_like(pseudo_cell_degree)])
 
-        pseudo_pins_pos = torch.tensor(pseudo_pins_pos, dtype=torch.float32)
-        pseudo_pins_io = torch.full(size=[pseudo_pins_pos.shape[0], 1], fill_value=2)
-        pseudo_pins_feat = torch.cat([pseudo_pins_pos / 1000, pseudo_pins_io], dim=-1)
-        self.pin_prop_dict['pos'] = torch.vstack([self.pin_prop_dict['pos'], pseudo_pins_pos])
-        self.pin_prop_dict['io'] = torch.vstack([self.pin_prop_dict['io'], pseudo_pins_io])
-        self.pin_prop_dict['feat'] = torch.vstack([self.pin_prop_dict['feat'], pseudo_pins_feat])
+        pseudo_pin_pos = torch.tensor(pseudo_pin_pos, dtype=torch.float32)
+        pseudo_pin_io = torch.full(size=[pseudo_pin_pos.shape[0], 1], fill_value=2)
+        pseudo_pin_feat = torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1)
+        self.pin_prop_dict['pos'] = torch.vstack([self.pin_prop_dict['pos'], pseudo_pin_pos])
+        self.pin_prop_dict['io'] = torch.vstack([self.pin_prop_dict['io'], pseudo_pin_io])
+        self.pin_prop_dict['feat'] = torch.vstack([self.pin_prop_dict['feat'], pseudo_pin_feat])
 
         left_cells = set(range(temp_n_cell)) - parted_cells
         left_nets = set()
@@ -176,8 +182,9 @@ class Netlist:
 
     def adapt_terminals(self):
         # TODO: better terminal selection
-        self.terminal_indices = [0]
-        self.cell_prop_dict['pos'][0, :] = self.cell_prop_dict['size'][0, :] / 2
+        biggest_cell_id = int(torch.argmax(torch.sum(self.cell_prop_dict['size'], dim=-1)))
+        self.terminal_indices = [biggest_cell_id]
+        self.cell_prop_dict['pos'][biggest_cell_id, :] = self.cell_prop_dict['size'][biggest_cell_id, :] / 2
 
     def construct_cell_flow(self):
         self._cell_flow = CellFlow(self.graph, self.terminal_indices)
@@ -219,3 +226,15 @@ class Netlist:
             values=torch.ones(size=[len(path_edge_indices[0])]),
             size=[n_paths, self.n_edge], dtype=torch.float32
         )
+
+
+def expand_netlist(netlist: Netlist) -> Dict[int, Netlist]:
+    # key is the id of pseudo macro in main netlist
+    # main netlist with key -1
+    dict_netlist = {-1: netlist}
+    dict_netlist.update(netlist.dict_sub_netlist)
+    return dict_netlist
+
+
+def sequentialize_netlist(netlist: Netlist) -> List[Netlist]:
+    return [netlist] + list(netlist.dict_sub_netlist.values())

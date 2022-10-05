@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple, Optional
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
-from data.graph.Netlist import Netlist
+from data.graph.Netlist import Netlist, expand_netlist
 
 
 class Layout:
@@ -46,3 +46,22 @@ class Layout:
                 torch.max(net_cell_span[:, :, 2:], dim=1)[0]
             ], dim=-1)
         return self._net_span
+
+
+def assemble_layout(dict_layout: Dict[int, Layout], device) -> Layout:
+    # key is the id of pseudo macro in main netlist
+    # main netlist with key -1
+    dict_netlist = expand_netlist(dict_layout[-1].netlist)
+    original_netlist: Netlist = dict_netlist[-1].original_netlist
+    cell_pos = torch.zeros(
+        size=[original_netlist.graph.num_nodes(ntype='cell') + len(dict_layout) - 1, 2],
+        dtype=torch.float32, device=device
+    )
+    if len(dict_layout) == 1:
+        layout = dict_layout[-1]
+    else:
+        for nid, sub_layout in dict_layout.items():
+            sub_netlist = dict_netlist[nid]
+            cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = sub_layout.cell_pos
+        layout = Layout(original_netlist, cell_pos[:original_netlist.graph.num_nodes(ntype='cell'), :])
+    return layout

@@ -1,4 +1,4 @@
-from data.Layout import Layout
+from data.graph import Layout
 
 
 class MetricFunction:

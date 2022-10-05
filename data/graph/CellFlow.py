@@ -50,14 +50,14 @@ class CellFlow:
             for f in fathers:
                 dict_cell_children.setdefault(f, []).append(i)
 
-        flow_edges = []
+        flow_edge_indices = []
         cell_paths = [[] for _ in range(n_cell)]
         edge_cnt = 0
         edge_stack, temp_path = queue.LifoQueue(), []
 
         ## 4.1 Label the terminals (fixed)
         for t in terminal_indices:
-            flow_edges.append((-1, t))
+            flow_edge_indices.append((-1, t))
             edge_cnt += 1
 
         ## 4.2 Find the paths from terminals to movable cells
@@ -73,7 +73,7 @@ class CellFlow:
                 if k[0] == -1:
                     temp_path.append(i)
                 else:
-                    flow_edges.append(k)
+                    flow_edge_indices.append(k)
                     temp_path.append(edge_cnt)
                     edge_cnt += 1
                 cell_paths[k[1]].append(deepcopy(temp_path))
@@ -87,9 +87,9 @@ class CellFlow:
 
         # time/space complexity: O(D * P)
         # where D is the max depth of CellFlow and P is the # of pins
-        assert len(flow_edges) == edge_cnt
+        assert len(flow_edge_indices) == edge_cnt
         self.fathers_list = fathers_list
-        self.flow_edges = flow_edges
+        self.flow_edge_indices = flow_edge_indices
         self.cell_paths = cell_paths
 
 
@@ -103,6 +103,6 @@ if __name__ == '__main__':
     rs = [0, 1]
     cell_flow = CellFlow(g, rs)
     print(cell_flow.fathers_list)
-    for _, edges in enumerate(cell_flow.flow_edges):
+    for _, edges in enumerate(cell_flow.flow_edge_indices):
         print(f'{_}: {edges}')
     print(cell_flow.cell_paths)
