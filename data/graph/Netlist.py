@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple, Optional
 import os, sys
 sys.path.append(os.path.abspath('.'))
 from data.graph.CellFlow import CellFlow
+from data.graph.utils import pad_net_cell_list
 
 
 class Netlist:
@@ -19,20 +20,23 @@ class Netlist:
             pin_prop_dict: Dict[str, torch.Tensor],
             layout_size: Optional[Tuple[float, float]] = None,
             hierarchical: bool = False,
-            cell_clusters: Optional[List[List[int]]] = None
+            cell_clusters: Optional[List[List[int]]] = None,
+            dreamplace_pos: Optional[torch.Tensor] = None
     ):
         self.graph = graph
         self.cell_prop_dict = cell_prop_dict
         self.net_prop_dict = net_prop_dict
         self.pin_prop_dict = pin_prop_dict
+        self.dreamplace_pos = dreamplace_pos
+        self.original_graph = None
         self.original_n_cell = graph.num_nodes(ntype='cell')
         self.dict_sub_netlist = {}
         if hierarchical:
             self.adapt_hierarchy(cell_clusters, use_tqdm=True)
 
-        self.n_cell = graph.num_nodes(ntype='cell')
-        self.n_net = graph.num_nodes(ntype='net')
-        self.n_pin = graph.num_edges(etype='pinned')
+        self.n_cell = self.graph.num_nodes(ntype='cell')
+        self.n_net = self.graph.num_nodes(ntype='net')
+        self.n_pin = self.graph.num_edges(etype='pinned')
 
         self.layout_size = layout_size
         if self.layout_size is None:
@@ -46,6 +50,49 @@ class Netlist:
             assert len(self.terminal_indices) > 0
 
         self._cell_flow = None
+        self.n_edge = len(self.cell_flow.flow_edges)
+        self._cell_path_edge_matrix = None
+        self._path_cell_matrix = None
+        self._path_edge_matrix = None
+        self._net_cell_indices_matrix = None
+        self.construct_cell_path_edge_matrices()
+        self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
+        self.movable_edge_indices = self.cell_flow.flow_edges[len(self.terminal_indices):]
+
+    @property
+    def cell_flow(self) -> CellFlow:
+        if self._cell_flow is None:
+            self.construct_cell_flow()
+        return self._cell_flow
+
+    @property
+    def cell_path_edge_matrix(self) -> torch.sparse.Tensor:
+        if self._cell_path_edge_matrix is None:
+            self.construct_cell_path_edge_matrices()
+        return self._cell_path_edge_matrix
+
+    @property
+    def path_cell_matrix(self) -> torch.sparse.Tensor:
+        if self._path_cell_matrix is None:
+            self.construct_cell_path_edge_matrices()
+        return self._path_cell_matrix
+
+    @property
+    def path_edge_matrix(self) -> torch.sparse.Tensor:
+        if self._path_edge_matrix is None:
+            self.construct_cell_path_edge_matrices()
+        return self._path_edge_matrix
+
+    @property
+    def net_cell_indices_matrix(self) -> Optional[torch.Tensor]:
+        if self._net_cell_indices_matrix is None:
+            ncl = [[] for _ in range(self.n_net)]
+            nets, cells = self.graph.edges(etype='pinned')
+            net_cell_tuples = list(zip(nets, cells))
+            for net, cell in net_cell_tuples:
+                ncl[int(net)].append(int(cell))
+            self._net_cell_indices_matrix = pad_net_cell_list(ncl, 30)
+        return self._net_cell_indices_matrix
 
     def get_cell_clusters(self) -> List[List[int]]:
         raise NotImplementedError
@@ -54,6 +101,7 @@ class Netlist:
         if cell_clusters is None:
             cell_clusters = self.get_cell_clusters()
 
+        self.original_graph = self.graph
         temp_n_cell = self.graph.num_nodes(ntype='cell')
         parted_cells = set()
         pseudo_cells_size = []
@@ -93,10 +141,11 @@ class Netlist:
             temp_n_cell += 1
 
         pseudo_cells_size = torch.tensor(pseudo_cells_size, dtype=torch.float32)
+        pseudo_cells_pos = torch.full_like(pseudo_cells_size, fill_value=torch.nan)
         pseudo_cells_degree = torch.tensor(pseudo_cells_degree, dtype=torch.float32).unsqueeze(-1)
         pseudo_cells_feat = torch.cat([torch.log(pseudo_cells_size), pseudo_cells_degree], dim=-1)
         self.cell_prop_dict['size'] = torch.vstack([self.cell_prop_dict['size'], pseudo_cells_size])
-        self.cell_prop_dict['pos'] = torch.vstack([self.cell_prop_dict['pos'], torch.zeros_like(pseudo_cells_size)])
+        self.cell_prop_dict['pos'] = torch.vstack([self.cell_prop_dict['pos'], pseudo_cells_pos])
         self.cell_prop_dict['feat'] = torch.vstack([self.cell_prop_dict['feat'], pseudo_cells_feat])
         self.cell_prop_dict['type'] = torch.vstack([self.cell_prop_dict['type'], torch.zeros_like(pseudo_cells_degree)])
 
@@ -128,12 +177,45 @@ class Netlist:
     def adapt_terminals(self):
         # TODO: better terminal selection
         self.terminal_indices = [0]
+        self.cell_prop_dict['pos'][0, :] = self.cell_prop_dict['size'][0, :] / 2
 
     def construct_cell_flow(self):
         self._cell_flow = CellFlow(self.graph, self.terminal_indices)
 
-    @property
-    def cell_flow(self) -> CellFlow:
-        if self._cell_flow is None:
-            self.construct_cell_flow()
-        return self._cell_flow
+    def construct_cell_path_edge_matrices(self):
+        cell_path_edge_indices = [[], []]
+        path_cell_indices = [[], []]
+        path_edge_indices = [[], []]
+        cell_path_edge_values = []
+        n_paths = 0
+        for c, paths in enumerate(self.cell_flow.cell_paths):
+            n_path = len(paths)
+            dict_edge_weight = {}
+            for ip, path in enumerate(paths):
+                path_cell_indices[0].append(n_paths + ip)
+                path_cell_indices[1].append(c)
+                for e in path:
+                    dict_edge_weight.setdefault(e, 0)
+                    dict_edge_weight[e] += 1 / n_path
+                    path_edge_indices[0].append(n_paths + ip)
+                    path_edge_indices[1].append(e)
+            for k, v in dict_edge_weight.items():
+                cell_path_edge_indices[0].append(c)
+                cell_path_edge_indices[1].append(k)
+                cell_path_edge_values.append(v)
+            n_paths += n_path
+        self._cell_path_edge_matrix = torch.sparse_coo_tensor(
+            indices=torch.tensor(cell_path_edge_indices, dtype=torch.int64),
+            values=cell_path_edge_values,
+            size=[self.n_cell, self.n_edge], dtype=torch.float32
+        )
+        self._path_cell_matrix = torch.sparse_coo_tensor(
+            indices=torch.tensor(path_cell_indices, dtype=torch.int64),
+            values=torch.ones(size=[len(path_cell_indices[0])]),
+            size=[n_paths, self.n_cell], dtype=torch.float32
+        )
+        self._path_edge_matrix = torch.sparse_coo_tensor(
+            indices=torch.tensor(path_edge_indices, dtype=torch.int64),
+            values=torch.ones(size=[len(path_edge_indices[0])]),
+            size=[n_paths, self.n_edge], dtype=torch.float32
+        )
