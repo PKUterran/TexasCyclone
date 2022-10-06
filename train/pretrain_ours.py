@@ -101,7 +101,6 @@ def pretrain_ours(
             model.train()
             t1 = time()
             losses = []
-
             n_netlist = len(list_netlist_dis_angle)
             iter_i_netlist_dis_angle = tqdm(enumerate(list_netlist_dis_angle), total=n_netlist) \
                 if use_tqdm else enumerate(list_netlist_dis_angle)
@@ -109,6 +108,9 @@ def pretrain_ours(
                 edge_dis, edge_angle = forward(netlist)
                 edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
                 edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
+#                 print(edge_dis[: 10])
+#                 print(edge_dis_loss)
+#                 print(edge_angle_loss)
                 loss = sum((
                     edge_dis_loss * 0.001,
                     edge_angle_loss * 0.1,

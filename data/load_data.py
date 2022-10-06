@@ -51,7 +51,7 @@ def netlist_from_numpy_directory(
     cells_type = torch.tensor(cell_data[:, 3], dtype=torch.float32).unsqueeze(-1)
     cells_pos = cells_ref_pos.clone()
     cells_pos[cells_type[:, 0] < 1e-5, :] = torch.nan
-    nets_degree = torch.tensor(net_data[:, 0], dtype=torch.float32).unsqueeze(-1)
+    nets_degree = torch.tensor(net_data, dtype=torch.float32).unsqueeze(-1)
     pins_pos = torch.tensor(pin_data[:, [0, 1]], dtype=torch.float32)
     pins_io = torch.tensor(pin_data[:, 2], dtype=torch.float32).unsqueeze(-1)
 
@@ -102,7 +102,7 @@ def netlist_from_numpy_directory(
             cell_prop_dict=deepcopy(cell_prop_dict),
             net_prop_dict=deepcopy(net_prop_dict),
             pin_prop_dict=deepcopy(pin_prop_dict),
-            layout_size=layout_size,
+            layout_size=layout_size, simple=True
         )
     )
     if save_type != 0:

@@ -21,7 +21,7 @@ class Netlist:
             layout_size: Optional[Tuple[float, float]] = None,
             hierarchical: bool = False,
             cell_clusters: Optional[List[List[int]]] = None,
-            original_netlist=None
+            original_netlist=None, simple=False
     ):
         self.graph = graph
         self.cell_prop_dict = cell_prop_dict
@@ -47,14 +47,15 @@ class Netlist:
             self.adapt_terminals()
             assert len(self.terminal_indices) > 0
 
+        if simple:
+            return
         self._cell_flow = None
-        self.n_edge = len(self.cell_flow.flow_edge_indices)
         self._cell_path_edge_matrix = None
         self._path_cell_matrix = None
         self._path_edge_matrix = None
         self._net_cell_indices_matrix = None
-        self.construct_cell_path_edge_matrices()
         self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
+        self.n_edge = len(self.cell_flow.flow_edge_indices)
         fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
         self.graph.add_edges(fathers, sons, etype='points-to')
         self.graph.add_edges(sons, fathers, etype='pointed-from')
