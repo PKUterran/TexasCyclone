@@ -18,7 +18,7 @@ def dump_pretrain_data(dir_name: str, save_type=1):
 
     dict_nid_dis_angle = {}
     for nid, sub_netlist in dict_netlist.items():
-        layout = layout_from_netlist_ref(netlist)
+        layout = layout_from_netlist_ref(sub_netlist)
         fathers, sons = layout.netlist.graph.edges(etype='points-to')
         edge_rel_pos = layout.cell_pos[sons, :] - layout.cell_pos[fathers, :]
         edge_dis = torch.norm(edge_rel_pos, dim=1)

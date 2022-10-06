@@ -53,11 +53,12 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None):
 
 
 DRAW_DIRECTORIES = [
-    '../../Placement-datasets/dac2012/superblue2',
-#     '../../Placement-datasets/dac2012/superblue3',
-#     '../../Placement-datasets/dac2012/superblue6',
-#     '../../Placement-datasets/dac2012/superblue7',
-#     '../../Placement-datasets/dac2012/superblue9',
+    # '../../Placement-datasets/dac2012/superblue2',
+    # '../../Placement-datasets/dac2012/superblue3',
+    # '../../Placement-datasets/dac2012/superblue6',
+    # '../../Placement-datasets/dac2012/superblue7',
+    # '../../Placement-datasets/dac2012/superblue9',
+    '../data/test/dataset1/medium',
 ]
 
 

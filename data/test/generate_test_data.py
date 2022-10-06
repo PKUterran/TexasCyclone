@@ -59,10 +59,7 @@ generate_netlist(
         [10, 10, 1, 0],
         [10, 10, 1, 0],
     ], dtype=np.float32),
-    net_data=np.array([
-        [2],
-        [2],
-    ], dtype=np.float32),
+    net_data=np.array([2, 2], dtype=np.float32),
     pin_data=np.array([
         [-25, 0, 0],
         [0, -5, 1],
@@ -94,11 +91,7 @@ generate_netlist(
         [10, 10, 2, 0],
         [10, 10, 2, 0],
     ], dtype=np.float32),
-    net_data=np.array([
-        [3],
-        [2],
-        [2],
-    ], dtype=np.float32),
+    net_data=np.array([3, 2, 2], dtype=np.float32),
     pin_data=np.array([
         [0, 25, 0],
         [5, 0, 1],
