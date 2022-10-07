@@ -7,8 +7,8 @@ from functools import reduce
 from time import time
 from tqdm import tqdm
 
-from data.Netlist import Netlist, netlist_from_numpy_directory
-from data.Layout import Layout, layout_from_netlist_dis_angle
+from data.graph import Netlist, Layout, expand_netlist, sequentialize_netlist, assemble_layout
+from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis_angle
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
 from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, MacroOverlapLoss, SampleNetOverlapLoss
@@ -36,6 +36,10 @@ def train_ours(
     train_netlists = [netlist_from_numpy_directory(dataset) for dataset in train_datasets]
     valid_netlists = [netlist_from_numpy_directory(dataset) for dataset in valid_datasets]
     test_netlists = [netlist_from_numpy_directory(dataset) for dataset in test_datasets]
+    print(f'\t# of samples: '
+          f'{len(train_netlists)} train, '
+          f'{len(valid_netlists)} valid, '
+          f'{len(test_netlists)} test.')
 
     # Configure model
     print(f'Building model...')
@@ -75,7 +79,7 @@ def train_ours(
     sample_overlap_loss_op = SampleOverlapLoss(span=4)
     macro_overlap_loss_op = MacroOverlapLoss(max_cap=50)
     area_loss_op = AreaLoss()
-    hpwl_loss_op = HPWLLoss()
+    hpwl_loss_op = HPWLLoss(device)
     cong_loss_op = SampleNetOverlapLoss(device, span=4)
 
     for epoch in range(0, args.epochs + 1):
@@ -84,17 +88,18 @@ def train_ours(
         logs.append({'epoch': epoch})
 
         def forward(netlist: Netlist) -> Tuple[Layout, torch.Tensor]:
-            net_dis, net_angle, pin_dis, pin_angle = model.forward(netlist)
-            layout, dis_loss = layout_from_netlist_dis_angle(netlist, net_dis, net_angle, pin_dis, pin_angle)
+            edge_dis, edge_angle = model.forward(netlist)
+            layout, dis_loss = layout_from_netlist_dis_angle(netlist, edge_dis, edge_angle)
             return layout, dis_loss
 
         def train(netlists: List[Netlist]):
             model.train()
             t1 = time()
             losses = []
-            n_netlist = len(netlists)
-            iter_i_netlist = tqdm(enumerate(netlists), total=n_netlist) \
-                if use_tqdm else enumerate(netlists)
+            seq_netlists = reduce(lambda x, y: x + y, [sequentialize_netlist(nl) for nl in netlists])
+            n_netlist = len(seq_netlists)
+            iter_i_netlist = tqdm(enumerate(seq_netlists), total=n_netlist) \
+                if use_tqdm else enumerate(seq_netlists)
             for j, netlist in iter_i_netlist:
                 layout, dis_loss = forward(netlist)
                 sample_overlap_loss = sample_overlap_loss_op.forward(layout)
@@ -102,13 +107,13 @@ def train_ours(
                 overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
                 area_loss = area_loss_op.forward(layout, limit=[-5e4, -5e4, 5e4, 5e4])
                 hpwl_loss = hpwl_loss_op.forward(layout)
-#                 cong_loss = cong_loss_op.forward(layout)
+                # cong_loss = cong_loss_op.forward(layout)
                 loss = sum((
                     args.dis_lambda * dis_loss,
                     args.overlap_lambda * overlap_loss,
                     args.area_lambda * area_loss,
                     args.hpwl_lambda * hpwl_loss,
-#                     args.cong_lambda * cong_loss,
+                    # args.cong_lambda * cong_loss,
                 ))
                 losses.append(loss)
                 if len(losses) >= args.batch or j == n_netlist - 1:
@@ -126,19 +131,32 @@ def train_ours(
                 if use_tqdm else zip(netlist_names, netlists)
             for netlist_name, netlist in iter_name_netlist:
                 print(f'\tFor {netlist_name}:')
-                layout, dis_loss = forward(netlist)
-                sample_overlap_loss = sample_overlap_loss_op.forward(layout)
-                macro_overlap_loss = macro_overlap_loss_op.forward(layout)
-                overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
-                area_loss = area_loss_op.forward(layout, limit=[-5e4, -5e4, 5e4, 5e4])
-                hpwl_loss = hpwl_loss_op.forward(layout)
-                cong_loss = cong_loss_op.forward(layout)
+                dict_netlist = expand_netlist(netlist)
+                dni = {}  # dict_netlist_info
+                for nid, sub_netlist in dict_netlist.items():
+                    dni[nid] = {}
+                    dni[nid]['layout'], dni[nid]['dis_loss'] = forward(sub_netlist)
+                    dni[nid]['sample_overlap_loss'] = sample_overlap_loss_op.forward(dni[nid]['layout'])
+                    dni[nid]['macro_overlap_loss'] = macro_overlap_loss_op.forward(dni[nid]['layout'])
+                    dni[nid]['overlap_loss'] = dni[nid]['sample_overlap_loss'] + dni[nid]['macro_overlap_loss'] * 10
+                    dni[nid]['area_loss'] = area_loss_op.forward(dni[nid]['layout'],
+                                                                 limit=[0, 0, *dni[nid]['layout'].netlist.layout_size])
+                    dni[nid]['hpwl_loss'] = hpwl_loss_op.forward(dni[nid]['layout'])
+                    dni[nid]['cong_loss'] = cong_loss_op.forward(dni[nid]['layout'])
+                layout = assemble_layout({nid: nif['layout'] for nid, nif in dni.items()}, device=device)
+                dis_loss = sum(v['dis_loss'] for v in dni.values())
+                sample_overlap_loss = sum(v['sample_overlap_loss'] for v in dni.values())
+                macro_overlap_loss = sum(v['macro_overlap_loss'] for v in dni.values())
+                overlap_loss = sum(v['overlap_loss'] for v in dni.values())
+                area_loss = sum(v['area_loss'] for v in dni.values())
+                hpwl_loss = sum(v['hpwl_loss'] for v in dni.values())
+                cong_loss = sum(v['cong_loss'] for v in dni.values())
                 loss = sum((
                     args.dis_lambda * dis_loss,
                     args.overlap_lambda * overlap_loss,
                     args.area_lambda * area_loss,
                     args.hpwl_lambda * hpwl_loss,
-#                     args.cong_lambda * cong_loss,
+                    # args.cong_lambda * cong_loss,
                 ))
                 print(f'\t\tDiscrepancy Loss: {dis_loss.data}')
                 print(f'\t\tSample Overlap Loss: {sample_overlap_loss.data}')

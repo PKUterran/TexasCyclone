@@ -1,6 +1,6 @@
 import torch
 
-from data.Layout import Layout
+from data.graph import Layout
 from .LossFunction import LossFunction
 
 

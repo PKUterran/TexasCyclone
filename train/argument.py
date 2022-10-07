@@ -66,7 +66,7 @@ def parse_train_args() -> argparse.Namespace:
         help='times of iterating train set per epoch'
     )
     args_parser.add_argument(
-        '--batch', type=int, default=1,
+        '--batch', type=int, default=10,
         help='# of netlists in a batch'
     )
     args_parser.add_argument(
@@ -78,7 +78,7 @@ def parse_train_args() -> argparse.Namespace:
         help='weight of overlap loss'
     )
     args_parser.add_argument(
-        '--area_lambda', type=float, default=1e0,
+        '--area_lambda', type=float, default=1e-3,
         help='weight of area loss'
     )
     args_parser.add_argument(
@@ -139,7 +139,7 @@ def parse_pretrain_args() -> argparse.Namespace:
 
     # Training settings
     args_parser.add_argument(
-        '--lr', type=float, default=1e-4,
+        '--lr', type=float, default=1e-3,
         help='learning rate'
     )
     args_parser.add_argument(
@@ -159,7 +159,7 @@ def parse_pretrain_args() -> argparse.Namespace:
         help='times of iterating train set per epoch'
     )
     args_parser.add_argument(
-        '--batch', type=int, default=1,
+        '--batch', type=int, default=10,
         help='# of netlists in a batch'
     )
 

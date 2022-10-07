@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from typing import Tuple, List
 
-from data.Layout import Layout
+from data.graph import Layout
 from .LossFunction import LossFunction
 
 
@@ -43,6 +43,8 @@ class SampleNetOverlapLoss(LossFunction):
         net_central_pos = net_span @ self.span2pos_matrix
         net_size = net_span @ self.span2size_matrix
         sample_i, sample_j = greedy_sample_net(net_central_pos, self.span)
+        if len(sample_i) == 0:
+            return torch.tensor(0.)
         sample_net_size_i = net_size[sample_i, :]
         sample_net_size_j = net_size[sample_j, :]
         sample_net_pos_i = net_central_pos[sample_i, :]

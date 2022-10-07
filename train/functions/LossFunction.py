@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from data.Layout import Layout
+from data.graph import Layout
 
 
 class LossFunction(nn.Module):
