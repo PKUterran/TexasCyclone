@@ -19,13 +19,6 @@ from data.graph.CellFlow import CellFlow
 from data.graph.utils import pad_net_cell_list
 
 
-class SubgraphPackage:
-    def __init__(self, father_graph: dgl.DGLHeteroGraph, partition: List[int], keep_nets_id: np.ndarray):
-        self.father_graph = father_graph
-        self.partition = partition
-        self.keep_nets_id = keep_nets_id
-
-
 class Netlist:
     def __init__(
             self, graph: dgl.DGLHeteroGraph,
@@ -36,21 +29,19 @@ class Netlist:
             hierarchical: bool = False,
             cell_clusters: Optional[List[List[int]]] = None,
             original_netlist=None, simple=False,
-            subgraph_package: Optional[SubgraphPackage] = None
     ):
-        self._graph = graph
+        self.graph = graph
         self.cell_prop_dict = cell_prop_dict
         self.net_prop_dict = net_prop_dict
         self.pin_prop_dict = pin_prop_dict
         self.original_netlist = original_netlist
-        self.subgraph_package = subgraph_package
         self.dict_sub_netlist = {}
         if hierarchical:
             self.adapt_hierarchy(cell_clusters, use_tqdm=True)
 
-        self.n_cell = self._graph.num_nodes(ntype='cell')
-        self.n_net = self._graph.num_nodes(ntype='net')
-        self.n_pin = self._graph.num_edges(etype='pinned')
+        self.n_cell = self.graph.num_nodes(ntype='cell')
+        self.n_net = self.graph.num_nodes(ntype='net')
+        self.n_pin = self.graph.num_edges(etype='pinned')
 
         self.layout_size = layout_size
         if self.layout_size is None:
@@ -72,12 +63,9 @@ class Netlist:
         self._net_cell_indices_matrix = None
         self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
         self.n_edge = len(self.cell_flow.flow_edge_indices)
-        if self.subgraph_package is None:
-            fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
-            self._graph.add_edges(fathers, sons, etype='points-to')
-            self._graph.add_edges(sons, fathers, etype='pointed-from')
-        else:
-            self._graph = None  # del self._graph 会直接把这个attribute删掉，这里应该使用”置为None”的方式自动释放内存。
+        fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
+        self.graph.add_edges(fathers, sons, etype='points-to')
+        self.graph.add_edges(sons, fathers, etype='pointed-from')
 
     @property
     def cell_flow(self) -> CellFlow:
@@ -117,25 +105,11 @@ class Netlist:
     def get_cell_clusters(self) -> List[List[int]]:
         raise NotImplementedError
 
-    @property
-    def graph(self) -> dgl.DGLHeteroGraph:
-        if self._graph is None:
-            assert self.subgraph_package is not None
-            graph = dgl.node_subgraph(self.subgraph_package.father_graph,
-                                      nodes={'cell': self.subgraph_package.partition,
-                                             'net': self.subgraph_package.keep_nets_id})
-            fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
-            graph.add_edges(fathers, sons, etype='points-to')
-            graph.add_edges(sons, fathers, etype='pointed-from')
-            return graph
-        else:
-            return self._graph
-
     def adapt_hierarchy(self, cell_clusters: Optional[List[List[int]]], use_tqdm=False):
         if cell_clusters is None:
             cell_clusters = self.get_cell_clusters()
 
-        temp_n_cell = self._graph.num_nodes(ntype='cell')
+        temp_n_cell = self.graph.num_nodes(ntype='cell')
         parted_cells = set()
         pseudo_cell_ref_pos = []
         pseudo_cell_size = []
@@ -152,7 +126,7 @@ class Netlist:
         for i,sub_graph_list in enumerate(cell_clusters):
             for node in sub_graph_list:
                 belong_node[int(node)] = i
-        for net_id, cell_id in zip(*[ns.tolist() for ns in self._graph.edges(etype='pinned')]):
+        for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):
             sub_graph_id = int(belong_node[int(cell_id)])
             sub_graph_net_degree_dict_list[sub_graph_id].setdefault(net_id,0)
             sub_graph_net_degree_dict_list[sub_graph_id][net_id] += 1
@@ -190,7 +164,7 @@ class Netlist:
             good_nets_id = torch.tensor(keep_nets_id)[good_nets]#numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}1111111111111")
             cnt+=1
-            sub_graph = dgl.node_subgraph(self._graph, nodes={'cell': partition, 'net': keep_nets_id})
+            sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id})
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}1111111111111")
             
             cnt+=1
@@ -199,13 +173,10 @@ class Netlist:
                 cell_prop_dict={k: v[sub_graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()},
                 net_prop_dict={k: v[sub_graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()},
                 pin_prop_dict={k: v[sub_graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()},
-                subgraph_package=SubgraphPackage(self.graph, partition, keep_nets_id)
             )
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
             ######################
-            assert sub_netlist._graph is None
-            # sub_netlist._graph = None
 
             # netlist_size = asizeof.asizeof(sub_netlist) / 1024 / 1024
             # cell_flow_size = asizeof.asizeof(sub_netlist._cell_flow) / 1024 / 1024
@@ -225,13 +196,13 @@ class Netlist:
             self.dict_sub_netlist[temp_n_cell] = sub_netlist
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
-            self._graph.add_nodes(temp_n_cell, ntype='cell')
+            self.graph.add_nodes(1, ntype='cell')
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
-            self._graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned')
+            self.graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned')
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
-            self._graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
+            self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
             ref_pos = torch.mean(sub_netlist.cell_prop_dict['ref_pos'], dim=0)
@@ -290,14 +261,14 @@ class Netlist:
 
         left_cells = set(range(temp_n_cell)) - parted_cells
         left_nets = set()
-        for net_id, cell_id in zip(*[ns.tolist() for ns in self._graph.edges(etype='pinned')]):
+        for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):
             if cell_id in left_cells:
                 left_nets.add(net_id)
-        self._graph = dgl.node_subgraph(self._graph, nodes={'cell': list(left_cells), 'net': list(left_nets)})
-        self.cell_prop_dict = {k: v[self._graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()}
-        self.net_prop_dict = {k: v[self._graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()}
-        self.pin_prop_dict = {k: v[self._graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()}
-        dict_reverse_nid = {int(idx): i for i, idx in enumerate(self._graph.nodes['cell'].data[dgl.NID])}
+        self.graph = dgl.node_subgraph(self.graph, nodes={'cell': list(left_cells), 'net': list(left_nets)})
+        self.cell_prop_dict = {k: v[self.graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()}
+        self.net_prop_dict = {k: v[self.graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()}
+        self.pin_prop_dict = {k: v[self.graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()}
+        dict_reverse_nid = {int(idx): i for i, idx in enumerate(self.graph.nodes['cell'].data[dgl.NID])}
         self.dict_sub_netlist = {dict_reverse_nid[k]: v for k, v in self.dict_sub_netlist.items()}
 
     def adapt_layout_size(self):
