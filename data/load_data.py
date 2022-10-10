@@ -133,32 +133,42 @@ def layout_from_netlist_ref(netlist: Netlist) -> Layout:
 
 
 if __name__ == '__main__':
-    netlist_ = netlist_from_numpy_directory('test/dataset1/medium', save_type=2)
+    # netlist_ = netlist_from_numpy_directory('test/dataset1/medium', save_type=2)
+    netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
+    print(netlist_.original_netlist.graph)
     print(netlist_.graph)
-    print(netlist_.cell_prop_dict)
-    print(netlist_.net_prop_dict)
-    print(netlist_.pin_prop_dict)
-    print(netlist_.n_cell, netlist_.n_net, netlist_.n_pin)
-    print(netlist_.cell_flow.fathers_list)
-    for _, edges in enumerate(netlist_.cell_flow.flow_edge_indices):
-        print(f'{_}: {edges}')
-    print(netlist_.cell_flow.cell_paths)
-    print(netlist_.cell_path_edge_matrix.to_dense().numpy())
-    print(netlist_.path_cell_matrix.to_dense().numpy())
-    print(netlist_.path_edge_matrix.to_dense().numpy())
-    print(netlist_.graph.edges(etype='points-to'))
+    # print(netlist_.cell_prop_dict)
+    # print(netlist_.net_prop_dict)
+    # print(netlist_.pin_prop_dict)
+    # print(netlist_.n_cell, netlist_.n_net, netlist_.n_pin)
+    # print(netlist_.cell_flow.fathers_list)
+    # for _, edges in enumerate(netlist_.cell_flow.flow_edge_indices):
+    #     print(f'{_}: {edges}')
+    print('flow edges:', len(netlist_.cell_flow.flow_edge_indices))
+    print('path depth:', sum(map(lambda x: sum(map(lambda y: len(y), x)), netlist_.cell_flow.cell_paths)))
+    # print(netlist_.cell_flow.cell_paths)
+    # print(netlist_.cell_path_edge_matrix.to_dense().numpy())
+    # print(netlist_.path_cell_matrix.to_dense().numpy())
+    # print(netlist_.path_edge_matrix.to_dense().numpy())
+    # print(netlist_.graph.edges(etype='points-to'))
+    cnt = 0
     for k, v in netlist_.dict_sub_netlist.items():
         print(f'{k}:')
         print('\t', v.graph)
-        print('\t', v.cell_prop_dict)
-        print('\t', v.net_prop_dict)
-        print('\t', v.pin_prop_dict)
-        print('\t', v.n_cell, v.n_net, v.n_pin)
-        print('\t', v.cell_flow.fathers_list)
-        for _, edges in enumerate(v.cell_flow.flow_edge_indices):
-            print('\t', f'{_}: {edges}')
-        print('\t', v.cell_flow.cell_paths)
-        print(v.cell_path_edge_matrix.to_dense().numpy())
-        print(v.path_cell_matrix.to_dense().numpy())
-        print(v.path_edge_matrix.to_dense().numpy())
-        print(v.graph.edges(etype='points-to'))
+        # print('\t', v.cell_prop_dict)
+        # print('\t', v.net_prop_dict)
+        # print('\t', v.pin_prop_dict)
+        # print('\t', v.n_cell, v.n_net, v.n_pin)
+        # print('\t', v.cell_flow.fathers_list)
+        # for _, edges in enumerate(v.cell_flow.flow_edge_indices):
+        #     print('\t', f'{_}: {edges}')
+        print('\tflow edges:', len(v.cell_flow.flow_edge_indices))
+        print('\tpath depth:', sum(map(lambda x: sum(map(lambda y: len(y), x)), v.cell_flow.cell_paths)))
+        # print('\t', v.cell_flow.cell_paths)
+        # print(v.cell_path_edge_matrix.to_dense().numpy())
+        # print(v.path_cell_matrix.to_dense().numpy())
+        # print(v.path_edge_matrix.to_dense().numpy())
+        # print(v.graph.edges(etype='points-to'))
+        cnt += 1
+        if cnt >= 10:
+            break

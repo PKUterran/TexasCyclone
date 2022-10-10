@@ -123,8 +123,8 @@ class Netlist:
             keep_nets_id = np.array(list(new_net_degree_dict.keys()))
             keep_nets_degree = np.array(list(new_net_degree_dict.values()))
             good_nets = np.abs(self.net_prop_dict['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
-            good_nets_id = keep_nets_id[good_nets]
-            sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': good_nets_id})
+            good_nets_id = torch.tensor(keep_nets_id[good_nets], dtype=torch.int64)
+            sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id})
             sub_netlist = Netlist(
                 graph=sub_graph,
                 cell_prop_dict={k: v[sub_graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()},
