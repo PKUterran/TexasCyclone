@@ -7,18 +7,26 @@ import dgl
 import tqdm
 from typing import Dict, List, Tuple, Optional
 
-import os, sys
-sys.path.append(os.path.abspath('.'))
-from data.graph.CellFlow import CellFlow
-from data.graph.utils import pad_net_cell_list
 from pympler import asizeof
 import psutil
 from memory_profiler import profile, memory_usage
 import copy
 import ctypes
 
+import os, sys
+sys.path.append(os.path.abspath('.'))
+from data.graph.CellFlow import CellFlow
+from data.graph.utils import pad_net_cell_list
+
+
+class SubgraphPackage:
+    def __init__(self, father_graph: dgl.DGLHeteroGraph, partition: List[int], keep_nets_id: np.ndarray):
+        self.father_graph = father_graph
+        self.partition = partition
+        self.keep_nets_id = keep_nets_id
+
+
 class Netlist:
-    father_graph = None
     def __init__(
             self, graph: dgl.DGLHeteroGraph,
             cell_prop_dict: Dict[str, torch.Tensor],
@@ -27,16 +35,17 @@ class Netlist:
             layout_size: Optional[Tuple[float, float]] = None,
             hierarchical: bool = False,
             cell_clusters: Optional[List[List[int]]] = None,
-            original_netlist=None, simple=False
+            original_netlist=None, simple=False,
+            subgraph_package: Optional[SubgraphPackage] = None
     ):
         self._graph = graph
         self.cell_prop_dict = cell_prop_dict
         self.net_prop_dict = net_prop_dict
         self.pin_prop_dict = pin_prop_dict
         self.original_netlist = original_netlist
+        self.subgraph_package = subgraph_package
         self.dict_sub_netlist = {}
         if hierarchical:
-            Netlist.father_graph = self._graph
             self.adapt_hierarchy(cell_clusters, use_tqdm=True)
 
         self.n_cell = self._graph.num_nodes(ntype='cell')
@@ -63,9 +72,10 @@ class Netlist:
         self._net_cell_indices_matrix = None
         self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
         self.n_edge = len(self.cell_flow.flow_edge_indices)
-        fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
-        self._graph.add_edges(fathers, sons, etype='points-to')
-        self._graph.add_edges(sons, fathers, etype='pointed-from')
+        if self._graph is not None:
+            fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
+            self._graph.add_edges(fathers, sons, etype='points-to')
+            self._graph.add_edges(sons, fathers, etype='pointed-from')
 
     @property
     def cell_flow(self) -> CellFlow:
@@ -108,7 +118,15 @@ class Netlist:
     @property
     def graph(self) -> dgl.DGLHeteroGraph:
         if self._graph is None:
-            self._graph = dgl.subgraph(Netlist.father_graph,nodes={'cell': self.partition, 'net': self.keep_nets_id})
+            graph = dgl.node_subgraph(self.subgraph_package.father_graph,
+                                      nodes={'cell': self.subgraph_package.partition,
+                                             'net': self.subgraph_package.keep_nets_id})
+            fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
+            graph.add_edges(fathers, sons, etype='points-to')
+            graph.add_edges(sons, fathers, etype='pointed-from')
+            return graph
+        else:
+            return self._graph
 
     def adapt_hierarchy(self, cell_clusters: Optional[List[List[int]]], use_tqdm=False):
         if cell_clusters is None:
@@ -178,6 +196,7 @@ class Netlist:
                 cell_prop_dict={k: v[sub_graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()},
                 net_prop_dict={k: v[sub_graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()},
                 pin_prop_dict={k: v[sub_graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()},
+                subgraph_package=SubgraphPackage(self.graph, partition, keep_nets_id)
             )
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
@@ -186,9 +205,6 @@ class Netlist:
             cnt+=1
             ######################
             del sub_netlist._graph
-            del sub_graph
-            sub_netlist.partition = partition
-            sub_netlist.keep_nets_id = keep_nets_id
 
             # netlist_size = asizeof.asizeof(sub_netlist) / 1024 / 1024
             # cell_flow_size = asizeof.asizeof(sub_netlist._cell_flow) / 1024 / 1024
