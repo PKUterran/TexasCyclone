@@ -72,10 +72,12 @@ class Netlist:
         self._net_cell_indices_matrix = None
         self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
         self.n_edge = len(self.cell_flow.flow_edge_indices)
-        if self._graph is not None:
+        if self.subgraph_package is None:
             fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
             self._graph.add_edges(fathers, sons, etype='points-to')
             self._graph.add_edges(sons, fathers, etype='pointed-from')
+        else:
+            self._graph = None  # del self._graph 会直接把这个attribute删掉，这里应该使用”置为None”的方式自动释放内存。
 
     @property
     def cell_flow(self) -> CellFlow:
@@ -105,7 +107,7 @@ class Netlist:
     def net_cell_indices_matrix(self) -> Optional[torch.Tensor]:
         if self._net_cell_indices_matrix is None:
             ncl = [[] for _ in range(self.n_net)]
-            nets, cells = self._graph.edges(etype='pinned')
+            nets, cells = self.graph.edges(etype='pinned')
             net_cell_tuples = list(zip(nets, cells))
             for net, cell in net_cell_tuples:
                 ncl[int(net)].append(int(cell))
@@ -118,6 +120,7 @@ class Netlist:
     @property
     def graph(self) -> dgl.DGLHeteroGraph:
         if self._graph is None:
+            assert self.subgraph_package is not None
             graph = dgl.node_subgraph(self.subgraph_package.father_graph,
                                       nodes={'cell': self.subgraph_package.partition,
                                              'net': self.subgraph_package.keep_nets_id})
@@ -200,11 +203,9 @@ class Netlist:
             )
             print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
             cnt+=1
-            sub_netlist.construct_cell_flow()
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             ######################
-            del sub_netlist._graph
+            assert sub_netlist._graph is None
+            # sub_netlist._graph = None
 
             # netlist_size = asizeof.asizeof(sub_netlist) / 1024 / 1024
             # cell_flow_size = asizeof.asizeof(sub_netlist._cell_flow) / 1024 / 1024
@@ -312,7 +313,7 @@ class Netlist:
         self.cell_prop_dict['pos'][biggest_cell_id, :] = self.cell_prop_dict['size'][biggest_cell_id, :] / 2
 
     def construct_cell_flow(self):
-        self._cell_flow = CellFlow(self._graph, self.terminal_indices)
+        self._cell_flow = CellFlow(self.graph, self.terminal_indices)
 
     def construct_cell_path_edge_matrices(self):
         cell_path_edge_indices = [[], []]
