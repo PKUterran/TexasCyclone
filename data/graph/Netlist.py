@@ -128,20 +128,16 @@ class Netlist:
                 belong_node[int(node)] = i
         for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):
             sub_graph_id = int(belong_node[int(cell_id)])
-            sub_graph_net_degree_dict_list[sub_graph_id].setdefault(net_id,0)
-            sub_graph_net_degree_dict_list[sub_graph_id][net_id] += 1
-        
+            if sub_graph_id == -1:
+                continue
+            sub_graph_net_degree_dict_list[sub_graph_id].setdefault(int(net_id),0)
+            sub_graph_net_degree_dict_list[sub_graph_id][int(net_id)] += 1
         ###########
         for i,partition in enumerate(iter_partition_list):
             if len(partition) <= 1:
                 continue
-            cnt = 0
             partition_set = set(partition)
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")#####测内存
-            cnt+=1
             parted_cells |= partition_set
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             #################
             # new_net_degree_dict = {}
             # for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):
@@ -149,33 +145,18 @@ class Netlist:
             #         new_net_degree_dict.setdefault(net_id, 0)
             #         new_net_degree_dict[net_id] += 1
             new_net_degree_dict = sub_graph_net_degree_dict_list[i]
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             ######################
             keep_nets_id = np.array(list(new_net_degree_dict.keys()))
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             keep_nets_degree = np.array(list(new_net_degree_dict.values()))
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             good_nets = np.abs(self.net_prop_dict['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             good_nets_id = torch.tensor(keep_nets_id)[good_nets]#numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}1111111111111")
-            cnt+=1
             sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id})
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}1111111111111")
-            
-            cnt+=1
             sub_netlist = Netlist(
                 graph=sub_graph,
                 cell_prop_dict={k: v[sub_graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()},
                 net_prop_dict={k: v[sub_graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()},
                 pin_prop_dict={k: v[sub_graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()},
             )
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             ######################
 
             # netlist_size = asizeof.asizeof(sub_netlist) / 1024 / 1024
@@ -194,48 +175,28 @@ class Netlist:
             # print(f"total mem use {total_mem_use} MB")
             #####################
             self.dict_sub_netlist[temp_n_cell] = sub_netlist
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             self.graph.add_nodes(1, ntype='cell')
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             self.graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned')
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             ref_pos = torch.mean(sub_netlist.cell_prop_dict['ref_pos'], dim=0)
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             sub_netlist.cell_prop_dict['ref_pos'] -= \
                 ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32)
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             #################
             '''
             这个地方感觉append可能会慢所以修改了一下实现
             '''
             # pseudo_cell_ref_pos.append(ref_pos)
             pseudo_cell_size.append(sub_netlist.layout_size)
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             pseudo_cell_degree.append(len(keep_nets_id) - len(good_nets_id))
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             # pseudo_pin_pos.extend([[0, 0] for _ in range(len(keep_nets_id))])
             if pseudo_cell_ref_pos == []:
                 pseudo_cell_ref_pos = ref_pos
             else:
                 pseudo_cell_ref_pos = torch.vstack([pseudo_cell_ref_pos,ref_pos])
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             if pseudo_pin_pos == []:
                 pseudo_pin_pos = torch.zeros([len(keep_nets_id),2])
             else:
                 pseudo_pin_pos = torch.zeros([pseudo_pin_pos.size(0)+len(keep_nets_id),2])
-            print(f"step {cnt} {psutil.Process(os.getpid()).memory_info().rss/ 1024 / 1024}")
-            cnt+=1
             #######################
             temp_n_cell += 1
 
