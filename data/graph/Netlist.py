@@ -61,7 +61,7 @@ class Netlist:
         self._path_cell_matrix = None
         self._path_edge_matrix = None
         self._net_cell_indices_matrix = None
-        self.terminal_edge_pos = cell_prop_dict['pos'][self.terminal_indices, :]
+        self.terminal_edge_pos = self.cell_prop_dict['pos'][self.terminal_indices, :]
         self.n_edge = len(self.cell_flow.flow_edge_indices)
         fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
         self.graph.add_edges(fathers, sons, etype='points-to')
