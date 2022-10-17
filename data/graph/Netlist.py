@@ -189,11 +189,11 @@ class Netlist:
             pseudo_cell_size.append(sub_netlist.layout_size)
             pseudo_cell_degree.append(len(keep_nets_id) - len(good_nets_id))
             # pseudo_pin_pos.extend([[0, 0] for _ in range(len(keep_nets_id))])
-            if not pseudo_cell_ref_pos:
+            if len(pseudo_cell_ref_pos) == 0:
                 pseudo_cell_ref_pos = ref_pos
             else:
                 pseudo_cell_ref_pos = torch.vstack([pseudo_cell_ref_pos, ref_pos])
-            if not pseudo_pin_pos:
+            if len(pseudo_pin_pos) == 0:
                 pseudo_pin_pos = torch.zeros([len(keep_nets_id), 2])
             else:
                 pseudo_pin_pos = torch.zeros([pseudo_pin_pos.size(0)+len(keep_nets_id), 2])
