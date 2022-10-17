@@ -76,7 +76,7 @@ class CellFlow:
                     flow_edge_indices.append(k)
                     temp_path.append(edge_cnt)
                     edge_cnt += 1
-                cell_paths[k[1]].append(deepcopy(temp_path))
+                cell_paths[k[1]].append(np.array(deepcopy(temp_path)))
                 edge_stack.put((-2, -2))
                 # Sample only one path from each of its father to avoid combination explosion
                 if k[0] == fathers_list[k[1]][0]:
@@ -88,9 +88,12 @@ class CellFlow:
         # time/space complexity: O(D * P)
         # where D is the max depth of CellFlow and P is the # of pins
         assert len(flow_edge_indices) == edge_cnt
-        # self.fathers_list = fathers_list
-        self.flow_edge_indices = flow_edge_indices
-        self.cell_paths = cell_paths
+        # self.fathers_list = np.array(fathers_list,dtype=object)
+        self.flow_edge_indices = np.array(flow_edge_indices)
+        self.cell_paths = np.array(cell_paths,dtype=object)
+        """
+        这里用numpy.array存储能减少内存开销
+        """
 
 
 if __name__ == '__main__':
