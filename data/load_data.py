@@ -46,8 +46,8 @@ def netlist_from_numpy_directory(
     cells = list(pin_net_cell[:, 1])
     nets = list(pin_net_cell[:, 0])
     cells_ref_pos = torch.tensor(cells_pos, dtype=torch.float32)
-    cells_size = torch.tensor(cell_data[:, [0, 1]], dtype=torch.float32)
-    cells_degree = torch.tensor(cell_data[:, 2], dtype=torch.float32).unsqueeze(-1)
+    cells_size = torch.tensor(cell_data[:, [1, 2]], dtype=torch.float32)
+    cells_degree = torch.tensor(cell_data[:, 0], dtype=torch.float32).unsqueeze(-1)
     cells_type = torch.tensor(cell_data[:, 3], dtype=torch.float32).unsqueeze(-1)
     cells_pos = cells_ref_pos.clone()
     cells_pos[cells_type[:, 0] < 1e-5, :] = torch.nan
