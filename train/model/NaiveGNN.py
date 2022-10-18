@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import dgl
 from time import time
 from typing import Tuple, Dict, Any
 from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv
@@ -76,7 +77,7 @@ class NaiveGNN(nn.Module):
 #         print('in train 5:', time() - t0)
         return edge_dis, edge_angle
 
-        
+
     def forward_with_feat(
             self,
             graph: dgl.DGLHeteroGraph,
