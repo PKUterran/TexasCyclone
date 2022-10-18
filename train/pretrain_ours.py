@@ -14,6 +14,20 @@ from data.pretrain import DIS_ANGLE_TYPE, load_pretrain_data
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
 
+mp.set_sharing_strategy('file_system')
+
+
+def store_netlist_loss(pi, args, model, batched_netlist_dis_angle, queue_loss):
+    netlist, dis_angle = batched_netlist_dis_angle[pi]
+    edge_dis, edge_angle = model.forward(netlist)
+    edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
+    edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
+    loss = sum((
+        edge_dis_loss * args.dis_lambda,
+        edge_angle_loss * args.angle_lambda,
+    ))
+    queue_loss.put(loss)
+
 
 def pretrain_ours(
         args: argparse.Namespace,
@@ -49,12 +63,15 @@ def pretrain_ours(
         list_netlist_dis_angle = sorted(list_netlist_dis_angle, key=lambda x: x[0].n_cell)
         batched_list = []
         temp_cell = 0
+        temp_netlist = 0
         for netlist_dis_angle in list_netlist_dis_angle:
-            if len(batched_list) == 0 or temp_cell >= args.batch_cells:
+            if len(batched_list) == 0 or temp_cell >= args.batch_cells or temp_netlist >= 4:
                 batched_list.append([])
                 temp_cell = 0
+                temp_netlist = 0
             batched_list[-1].append(netlist_dis_angle)
             temp_cell += netlist_dis_angle[0].n_cell
+            temp_netlist += 1
         return batched_list
     
     train_list_netlist_dis_angle = unpack_netlist_dis_angle(
@@ -64,6 +81,7 @@ def pretrain_ours(
     test_list_netlist_dis_angle = unpack_netlist_dis_angle(
         [load_pretrain_data(dataset) for dataset in test_datasets])
     batched_train_list_netlist_dis_angle = batch_train_netlist_dis_angle(train_list_netlist_dis_angle)
+#     print('\tbatches', [len(b) for b in batched_train_list_netlist_dis_angle])
     print(f'\t# of samples: '
           f'{len(batched_train_list_netlist_dis_angle)} batched train, '
           f'{len(train_list_netlist_dis_angle)} train, '
@@ -105,7 +123,7 @@ def pretrain_ours(
     # Train model
     best_metric = 1e8  # lower is better
 
-    for epoch in range(0, args.epochs + 1):
+    for epoch in range(1, args.epochs + 1):
         print(f'##### EPOCH {epoch} #####')
         print(f'\tLearning rate: {optimizer.state_dict()["param_groups"][0]["lr"]}')
         logs.append({'epoch': epoch})
@@ -136,16 +154,6 @@ def pretrain_ours(
                     losses.clear()
             print(f"\tTraining time per epoch: {time() - t1}")
 
-        def store_netlist_loss(netlist: Netlist, dis_angle: DIS_ANGLE_TYPE, list_loss: List):
-            edge_dis, edge_angle = forward(netlist)
-            edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
-            edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
-            loss = sum((
-                edge_dis_loss * args.dis_lambda,
-                edge_angle_loss * args.angle_lambda,
-            ))
-            list_loss.append(loss)
-
         def train_batch(batched_list_netlist_dis_angle: List[List[Tuple[Netlist, DIS_ANGLE_TYPE]]]):
             model.train()
             t1 = time()
@@ -154,15 +162,16 @@ def pretrain_ours(
                 if use_tqdm else enumerate(batched_list_netlist_dis_angle)
             for j, batched_netlist_dis_angle in iter_i_batched_netlist_dis_angle:
                 with mp.Manager() as manager:
-                    losses = manager.list()
-                    ps = [mp.Process(target=store_netlist_loss, args=(netlist, dis_angle, losses))
-                          for netlist, dis_angle in batched_netlist_dis_angle]
-                    for p in ps:
-                        p.start()
-                    for p in ps:
-                        p.join()
+                    queue_loss = manager.Queue()
+                    mp.spawn(fn=store_netlist_loss, args=(args, model, batched_netlist_dis_angle, queue_loss), 
+                             nprocs=len(batched_netlist_dis_angle))
+                    losses = []
+                    while queue_loss.qsize():
+                        losses.append(queue_loss.get())
+                    print(losses)
                     sum(losses).backward()
                     optimizer.step()
+                exit(123)
             print(f"\tTraining time per epoch: {time() - t1}")
 
         def evaluate(list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]],
@@ -175,11 +184,8 @@ def pretrain_ours(
             n_netlist = len(list_netlist_dis_angle)
             iter_i_netlist_dis_angle = tqdm(list_netlist_dis_angle, total=n_netlist) \
                 if use_tqdm else list_netlist_dis_angle
-            flag = False
             for netlist, dis_angle in iter_i_netlist_dis_angle:
-                t0 = time()
                 edge_dis, edge_angle = forward(netlist)
-                print(time() - t0)
                 edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
                 edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
                 loss = sum((
@@ -191,12 +197,7 @@ def pretrain_ours(
                     f'{dataset_name}_net_angle_loss': float(edge_angle_loss.data),
                     f'{dataset_name}_loss': float(loss.data),
                 }
-                print(time() - t0)
                 ds.append(d)
-                if not flag:
-                    flag = True
-                else:
-                    exit(1234)
 
             d_t = mean_dict(ds)
             logs[-1].update(d_t)
@@ -208,7 +209,8 @@ def pretrain_ours(
         t0 = time()
         if epoch:
             for _ in range(args.train_epoch):
-                train_batch(batched_train_list_netlist_dis_angle)
+                train(train_list_netlist_dis_angle)
+#                 train_batch(batched_train_list_netlist_dis_angle)
                 scheduler.step()
         logs[-1].update({'train_time': time() - t0})
         t2 = time()

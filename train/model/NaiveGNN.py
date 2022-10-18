@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import dgl
 from time import time
 from typing import Tuple, Dict, Any
 from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv
