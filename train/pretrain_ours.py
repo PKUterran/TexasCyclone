@@ -2,6 +2,7 @@ import argparse
 import torch
 import torch.nn.functional as F
 import json
+from time import time
 from typing import List, Dict, Any, Tuple
 from functools import reduce
 from time import time
@@ -42,13 +43,19 @@ def pretrain_ours(
                 list_netlist_dis_angle.append((sub_nl, dict_nid_dis_angle[nid]))
         return list_netlist_dis_angle
 
+    def compact_train_netlist_dis_angle(list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]]
+                                       ) -> list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]]:
+            pass
+    
     train_list_netlist_dis_angle = unpack_netlist_dis_angle(
         [load_pretrain_data(dataset) for dataset in train_datasets])
     valid_list_netlist_dis_angle = unpack_netlist_dis_angle(
         [load_pretrain_data(dataset) for dataset in valid_datasets])
     test_list_netlist_dis_angle = unpack_netlist_dis_angle(
         [load_pretrain_data(dataset) for dataset in test_datasets])
+    compacted_train_list_netlist_dis_angle = compact_train_netlist_dis_angle(train_list_netlist_dis_angle)
     print(f'\t# of samples: '
+          f'{len(compacted_train_list_netlist_dis_angle)} compacted train, '
           f'{len(train_list_netlist_dis_angle)} train, '
           f'{len(valid_list_netlist_dis_angle)} valid, '
           f'{len(test_list_netlist_dis_angle)} test.')
@@ -124,35 +131,45 @@ def pretrain_ours(
             model.eval()
             ds = []
             print(f'\tEvaluate {dataset_name}:')
+            for netlist_name in netlist_names:
+                print(f'\t\t{netlist_name}:')
             n_netlist = len(list_netlist_dis_angle)
-            iter_i_netlist_dis_angle = tqdm(zip(netlist_names, list_netlist_dis_angle), total=n_netlist) \
-                if use_tqdm else zip(netlist_names, list_netlist_dis_angle)
-            for netlist_name, (netlist, dis_angle) in iter_i_netlist_dis_angle:
-                print(f'\tFor {netlist_name}:')
+            iter_i_netlist_dis_angle = tqdm(list_netlist_dis_angle, total=n_netlist) \
+                if use_tqdm else list_netlist_dis_angle
+            flag = False
+            for netlist, dis_angle in iter_i_netlist_dis_angle:
+                t0 = time()
                 edge_dis, edge_angle = forward(netlist)
+                print(time() - t0)
                 edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
                 edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
                 loss = sum((
                     edge_dis_loss * 0.001,
                     edge_angle_loss * 0.1,
                 ))
-                print(f'\t\tEdge Distance Loss: {edge_dis_loss.data}')
-                print(f'\t\tEdge Angle Loss: {edge_angle_loss.data}')
-                print(f'\t\tTotal Loss: {loss.data}')
                 d = {
                     f'{dataset_name}_net_dis_loss': float(edge_dis_loss.data),
                     f'{dataset_name}_net_angle_loss': float(edge_angle_loss.data),
                     f'{dataset_name}_loss': float(loss.data),
                 }
+                print(time() - t0)
                 ds.append(d)
+                if not flag:
+                    flag = True
+                else:
+                    exit(1234)
 
-            logs[-1].update(mean_dict(ds))
+            d_t = mean_dict(ds)
+            logs[-1].update(d_t)
+            print(f'\t\tEdge Distance Loss: {d_t[f"{dataset_name}_net_dis_loss"]}')
+            print(f'\t\tEdge Angle Loss: {d_t[f"{dataset_name}_net_angle_loss"]}')
+            print(f'\t\tTotal Loss: {d_t[f"{dataset_name}_loss"]}')
             return logs[-1][f'{dataset_name}_loss']
 
         t0 = time()
         if epoch:
             for _ in range(args.train_epoch):
-                train(train_list_netlist_dis_angle)
+                train(compacted_train_list_netlist_dis_angle)
                 scheduler.step()
         logs[-1].update({'train_time': time() - t0})
         t2 = time()
