@@ -1,4 +1,5 @@
 import argparse
+from cmath import isnan
 import torch
 import torch.nn.functional as F
 import json
@@ -10,7 +11,8 @@ from tqdm import tqdm
 from data.graph import Netlist, expand_netlist
 from data.pretrain import DIS_ANGLE_TYPE, load_pretrain_data
 from data.utils import set_seed, mean_dict
-from train.model import NaiveGNN
+from train.model import NaiveGNN,placeGNN
+import dgl
 
 
 def pretrain_ours(
@@ -23,6 +25,7 @@ def pretrain_ours(
         model_dir: str = None,
 ):
     # Configure environment
+    # torch.autograd.set_detect_anomaly(True)
     logs: List[Dict[str, Any]] = []
     use_cuda = args.device != 'cpu'
     use_tqdm = args.use_tqdm
@@ -65,10 +68,14 @@ def pretrain_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
+        'NUM_LAYERS': 3,
+        'NUM_HEADS': 8,
     }
 
     if args.gnn == 'naive':
         model = NaiveGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
+    elif args.gnn == 'place':
+        model = placeGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
     else:
         assert False, f'Undefined GNN {args.gnn}'
 
@@ -83,7 +90,7 @@ def pretrain_ours(
     print(f'# of parameters: {n_param}')
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=(1 - args.lr_decay))
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma=(1 - args.lr_decay))
 
     # Train model
     best_metric = 1e8  # lower is better
@@ -104,48 +111,163 @@ def pretrain_ours(
             n_netlist = len(list_netlist_dis_angle)
             iter_i_netlist_dis_angle = tqdm(enumerate(list_netlist_dis_angle), total=n_netlist) \
                 if use_tqdm else enumerate(list_netlist_dis_angle)
+            ########
+            #########
+            batch_graph = []
+            batch_netlist = []
+            total_batch_nodes_num = 0
+            total_batch_edge_idx = 0
+            batch_cell_feature = []
+            batch_net_feature = []
+            batch_pin_feature = []
+            sub_netlist_feature_idrange = []
+            batch_angle = []
+            batch_dis = []
+            #########
+            ###########
             for j, (netlist, dis_angle) in iter_i_netlist_dis_angle:
-                edge_dis, edge_angle = forward(netlist)
-                edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
-                edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
-                loss = sum((
-                    edge_dis_loss * 0.001,
-                    edge_angle_loss * 0.1,
-                ))
-                losses.append(loss)
-                if len(losses) >= args.batch or j == n_netlist - 1:
+                ############
+                #################
+                batch_netlist.append(netlist)
+                father,_ = netlist.graph.edges(etype='points-to')
+                edge_idx_num = father.size(0)
+                sub_netlist_feature_idrange.append([total_batch_edge_idx,total_batch_edge_idx+edge_idx_num])
+                total_batch_edge_idx += edge_idx_num
+                total_batch_nodes_num += netlist.graph.num_nodes('cell')
+                batch_cell_feature.append(netlist.cell_prop_dict['feat'])
+                batch_net_feature.append(netlist.net_prop_dict['feat'])
+                batch_pin_feature.append(netlist.pin_prop_dict['feat'])
+                batch_dis.append(dis_angle[0])
+                batch_angle.append(dis_angle[1])
+                if total_batch_nodes_num > 10000 or j == n_netlist - 1:
+                    batch_cell_feature = torch.vstack(batch_cell_feature)
+                    batch_net_feature = torch.vstack(batch_net_feature)
+                    batch_pin_feature = torch.vstack(batch_pin_feature)
+                    batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
+                    batch_edge_dis,batch_edge_angle = model.forward(batch_graph,(batch_cell_feature,batch_net_feature,batch_pin_feature))
+                    # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                    for nid in range(len(batch_dis)):
+                        begin_idx,end_idx = sub_netlist_feature_idrange[nid]
+                        edge_dis,edge_angle = batch_edge_dis[begin_idx:end_idx],batch_edge_angle[begin_idx:end_idx]
+                        dis_angle = [batch_dis[nid],batch_angle[nid]]
+                        edge_dis_loss = F.mse_loss(torch.log(edge_dis+1), torch.log(dis_angle[0].to(device)+1)) ** 0.5
+                        edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device)) ** 0.5
+                        loss = sum((
+                            edge_dis_loss * 0.101,
+                            edge_angle_loss * 1.1,
+                        ))
+                        losses.append(loss)
                     sum(losses).backward()
                     optimizer.step()
                     losses.clear()
+                    batch_netlist = []
+                    sub_netlist_feature_idrange = []
+                    total_batch_nodes_num = 0
+                    total_batch_edge_idx = 0
+                    batch_cell_feature = []
+                    batch_net_feature = []
+                    batch_pin_feature = []
+                    batch_angle = []
+                    batch_dis = []
+                    torch.cuda.empty_cache()
+                    
+
+                #################
+                ##############
+            torch.cuda.empty_cache()
             print(f"\tTraining time per epoch: {time() - t1}")
 
         def evaluate(list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]],
                      dataset_name: str, netlist_names: List[str], verbose=True) -> float:
             model.eval()
             ds = []
+            dni = {}
             print(f'\tEvaluate {dataset_name}:')
             n_netlist = len(list_netlist_dis_angle)
-            iter_i_netlist_dis_angle = tqdm(zip(netlist_names, list_netlist_dis_angle), total=n_netlist) \
-                if use_tqdm else zip(netlist_names, list_netlist_dis_angle)
-            for netlist_name, (netlist, dis_angle) in iter_i_netlist_dis_angle:
-                print(f'\tFor {netlist_name}:')
-                edge_dis, edge_angle = forward(netlist)
-                edge_dis_loss = F.mse_loss(edge_dis, dis_angle[0]) ** 0.5
-                edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1]) ** 0.5
-                loss = sum((
-                    edge_dis_loss * 0.001,
-                    edge_angle_loss * 0.1,
-                ))
-                print(f'\t\tEdge Distance Loss: {edge_dis_loss.data}')
-                print(f'\t\tEdge Angle Loss: {edge_angle_loss.data}')
-                print(f'\t\tTotal Loss: {loss.data}')
-                d = {
-                    f'{dataset_name}_net_dis_loss': float(edge_dis_loss.data),
-                    f'{dataset_name}_net_angle_loss': float(edge_angle_loss.data),
-                    f'{dataset_name}_loss': float(loss.data),
-                }
-                ds.append(d)
+            iter_i_netlist_dis_angle = tqdm(enumerate(list_netlist_dis_angle), total=n_netlist) \
+                if use_tqdm else enumerate(list_netlist_dis_angle)
+            ########
+            #########
+            batch_graph = []
+            batch_netlist = []
+            total_batch_nodes_num = 0
+            total_batch_edge_idx = 0
+            batch_cell_feature = []
+            batch_net_feature = []
+            batch_pin_feature = []
+            sub_netlist_feature_idrange = []
+            batch_angle = []
+            batch_dis = []
+            #########
+            ###########
+            for j ,(netlist, dis_angle) in iter_i_netlist_dis_angle:
+                ############
+                #################
+                dni[j] = {}
+                batch_netlist.append(j)
+                father,_ = netlist.graph.edges(etype='points-to')
+                edge_idx_num = father.size(0)
+                sub_netlist_feature_idrange.append([total_batch_edge_idx,total_batch_edge_idx+edge_idx_num])
+                total_batch_edge_idx += edge_idx_num
+                total_batch_nodes_num += netlist.graph.num_nodes('cell')
+                batch_cell_feature.append(netlist.cell_prop_dict['feat'])
+                batch_net_feature.append(netlist.net_prop_dict['feat'])
+                batch_pin_feature.append(netlist.pin_prop_dict['feat'])
+                batch_dis.append(dis_angle[0])
+                batch_angle.append(dis_angle[1])
+                if total_batch_nodes_num > 10000 or j == n_netlist - 1:
+                    batch_cell_feature = torch.vstack(batch_cell_feature)
+                    batch_net_feature = torch.vstack(batch_net_feature)
+                    batch_pin_feature = torch.vstack(batch_pin_feature)
+                    batch_graph = []
+                    for j_ in batch_netlist:
+                        sub_netlist,_ = list_netlist_dis_angle[j_]
+                        batch_graph.append(sub_netlist.graph)
+                    batch_graph = dgl.batch(batch_graph)
+                    batch_edge_dis,batch_edge_angle = model.forward(batch_graph,(batch_cell_feature,batch_net_feature,batch_pin_feature))
+                    # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                    for nid in range(len(batch_dis)):
+                        begin_idx,end_idx = sub_netlist_feature_idrange[nid]
+                        edge_dis,edge_angle = batch_edge_dis[begin_idx:end_idx],batch_edge_angle[begin_idx:end_idx]
+                        dis_angle = [batch_dis[nid],batch_angle[nid]]
+                        edge_dis_loss = F.mse_loss(torch.log(edge_dis+1), torch.log(dis_angle[0].to(device)+1)) ** 0.5
+                        edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device)) ** 0.5
+                        loss = sum((
+                            edge_dis_loss * 0.101,
+                            edge_angle_loss * 1.1,
+                        ))
+                        nid_ = batch_netlist[nid]
+                        dni[nid_]['net_dis_loss'] = float(edge_dis_loss.data)
+                        dni[nid_]['net_angle_loss'] = float(edge_angle_loss.data)
+                        dni[nid_]['loss'] = float(loss.data)
+                        del loss
+                    batch_netlist = []
+                    sub_netlist_feature_idrange = []
+                    total_batch_nodes_num = 0
+                    total_batch_edge_idx = 0
+                    batch_cell_feature = []
+                    batch_net_feature = []
+                    batch_pin_feature = []
+                    batch_angle = []
+                    batch_dis = []
+                    torch.cuda.empty_cache()
+                    
 
+                #################
+                ##############
+
+            net_dis_loss = sum(v['net_dis_loss'] for v in dni.values()) / len(netlist_names)
+            net_angle_loss = sum(v['net_angle_loss'] for v in dni.values()) / len(netlist_names)
+            total_loss = sum(v['loss'] for v in dni.values()) / len(netlist_names)
+            print(f'\t\tEdge Distance Loss: {net_dis_loss}')
+            print(f'\t\tEdge Angle Loss: {net_angle_loss}')
+            print(f'\t\tTotal Loss: {total_loss}')
+            d = {
+                    f'{dataset_name}_net_dis_loss': float(net_dis_loss),
+                    f'{dataset_name}_net_angle_loss': float(net_angle_loss),
+                    f'{dataset_name}_loss': float(total_loss),
+                }
+            ds.append(d)
             logs[-1].update(mean_dict(ds))
             return logs[-1][f'{dataset_name}_loss']
 
