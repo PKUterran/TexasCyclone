@@ -9,15 +9,15 @@ train_datasets = [
     '../Placement-datasets/dac2012/superblue2',
     '../Placement-datasets/dac2012/superblue3',
     '../Placement-datasets/dac2012/superblue6',
-#     'data/test/dataset1/medium',
+    # 'data/test/dataset1/medium',
 ]
 valid_datasets = [
     '../Placement-datasets/dac2012/superblue7',
-#     'data/test/dataset1/small',
+    # 'data/test/dataset1/small',
 ]
 test_datasets = [
     '../Placement-datasets/dac2012/superblue9',
-#     'data/test/dataset1/small',
+    # 'data/test/dataset1/small',
 ]
 
 if __name__ == '__main__':
