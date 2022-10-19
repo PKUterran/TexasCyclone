@@ -74,7 +74,7 @@ class PlaceGNN(nn.Module):
             hidden_cell_feat[fathers, :],
             hidden_cell_feat[sons, :]
         ], dim=-1)
-        edge_dis = F.softplus(self.edge_dis_readout(hidden_cell_pair_feat)).view(-1)
+        edge_dis = torch.exp(self.edge_dis_readout(hidden_cell_pair_feat) / 4).view(-1)
         edge_angle = torch.tanh(self.edge_angle_readout(hidden_cell_pair_feat)).view(-1) * 4
         return edge_dis, edge_angle
 

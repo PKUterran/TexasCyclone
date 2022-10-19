@@ -55,8 +55,8 @@ def train_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
-        'NUM_LAYERS': 3,
-        'NUM_HEADS': 8,
+        'NUM_LAYERS': 1,
+        'NUM_HEADS': 2,
     }
 
     if args.gnn == 'naive':
