@@ -24,7 +24,7 @@ def parse_train_args() -> argparse.Namespace:
 
     # Model settings
     args_parser.add_argument(
-        '--gnn', type=str, default='naive',
+        '--gnn', type=str, default='place',
         help='GNN model'
     )
     args_parser.add_argument(
@@ -68,6 +68,10 @@ def parse_train_args() -> argparse.Namespace:
     args_parser.add_argument(
         '--batch', type=int, default=10,
         help='# of netlists in a batch'
+    )
+    args_parser.add_argument(
+        '--batch_cells', type=int, default=100000,
+        help='# of cells in netlists of a batch'
     )
     args_parser.add_argument(
         '--dis_lambda', type=float, default=1e-1,
@@ -117,7 +121,7 @@ def parse_pretrain_args() -> argparse.Namespace:
 
     # Model settings
     args_parser.add_argument(
-        '--gnn', type=str, default='naive',
+        '--gnn', type=str, default='place',
         help='GNN model'
     )
     args_parser.add_argument(
@@ -161,6 +165,18 @@ def parse_pretrain_args() -> argparse.Namespace:
     args_parser.add_argument(
         '--batch', type=int, default=10,
         help='# of netlists in a batch'
+    )
+    args_parser.add_argument(
+        '--batch_cells', type=int, default=50000,
+        help='# of cells in netlists of a batch'
+    )
+    args_parser.add_argument(
+        '--dis_lambda', type=float, default=1e-3,
+        help='weight of distance loss'
+    )
+    args_parser.add_argument(
+        '--angle_lambda', type=float, default=1e-1,
+        help='weight of angle loss'
     )
 
     args = args_parser.parse_args()

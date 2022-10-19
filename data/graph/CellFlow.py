@@ -88,7 +88,7 @@ class CellFlow:
         # time/space complexity: O(D * P)
         # where D is the max depth of CellFlow and P is the # of pins
         assert len(flow_edge_indices) == edge_cnt
-        self.fathers_list = np.array(fathers_list,dtype=object)
+        # self.fathers_list = np.array(fathers_list,dtype=object)
         self.flow_edge_indices = np.array(flow_edge_indices)
         self.cell_paths = np.array(cell_paths,dtype=object)
         """
@@ -105,7 +105,7 @@ if __name__ == '__main__':
     }, num_nodes_dict={'cell': 6, 'net': 5})
     rs = [0, 1]
     cell_flow = CellFlow(g, rs)
-    print(cell_flow.fathers_list)
+    # print(cell_flow.fathers_list)
     for _, edges in enumerate(cell_flow.flow_edge_indices):
         print(f'{_}: {edges}')
     print(cell_flow.cell_paths)
