@@ -1,7 +1,6 @@
 import argparse
 import torch
 import torch.nn.functional as F
-import torch.multiprocessing as mp
 import json
 from time import time
 from typing import List, Dict, Any, Tuple
@@ -13,8 +12,6 @@ from data.graph import Netlist, expand_netlist
 from data.pretrain import DIS_ANGLE_TYPE, load_pretrain_data
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN
-
-mp.set_sharing_strategy('file_system')
 
 
 def store_netlist_loss(pi, args, model, batched_netlist_dis_angle, queue_loss):
@@ -57,22 +54,6 @@ def pretrain_ours(
             for nid, sub_nl in dict_netlist.items():
                 list_netlist_dis_angle.append((sub_nl, dict_nid_dis_angle[nid]))
         return list_netlist_dis_angle
-
-    def batch_train_netlist_dis_angle(list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]]
-                                      ) -> List[List[Tuple[Netlist, DIS_ANGLE_TYPE]]]:
-        list_netlist_dis_angle = sorted(list_netlist_dis_angle, key=lambda x: x[0].n_cell)
-        batched_list = []
-        temp_cell = 0
-        temp_netlist = 0
-        for netlist_dis_angle in list_netlist_dis_angle:
-            if len(batched_list) == 0 or temp_cell >= args.batch_cells or temp_netlist >= 4:
-                batched_list.append([])
-                temp_cell = 0
-                temp_netlist = 0
-            batched_list[-1].append(netlist_dis_angle)
-            temp_cell += netlist_dis_angle[0].n_cell
-            temp_netlist += 1
-        return batched_list
     
     train_list_netlist_dis_angle = unpack_netlist_dis_angle(
         [load_pretrain_data(dataset) for dataset in train_datasets])
@@ -80,10 +61,7 @@ def pretrain_ours(
         [load_pretrain_data(dataset) for dataset in valid_datasets])
     test_list_netlist_dis_angle = unpack_netlist_dis_angle(
         [load_pretrain_data(dataset) for dataset in test_datasets])
-    batched_train_list_netlist_dis_angle = batch_train_netlist_dis_angle(train_list_netlist_dis_angle)
-#     print('\tbatches', [len(b) for b in batched_train_list_netlist_dis_angle])
     print(f'\t# of samples: '
-          f'{len(batched_train_list_netlist_dis_angle)} batched train, '
           f'{len(train_list_netlist_dis_angle)} train, '
           f'{len(valid_list_netlist_dis_angle)} valid, '
           f'{len(test_list_netlist_dis_angle)} test.')
@@ -154,26 +132,6 @@ def pretrain_ours(
                     losses.clear()
             print(f"\tTraining time per epoch: {time() - t1}")
 
-        def train_batch(batched_list_netlist_dis_angle: List[List[Tuple[Netlist, DIS_ANGLE_TYPE]]]):
-            model.train()
-            t1 = time()
-            n_batch = len(batched_list_netlist_dis_angle)
-            iter_i_batched_netlist_dis_angle = tqdm(enumerate(batched_list_netlist_dis_angle), total=n_batch) \
-                if use_tqdm else enumerate(batched_list_netlist_dis_angle)
-            for j, batched_netlist_dis_angle in iter_i_batched_netlist_dis_angle:
-                with mp.Manager() as manager:
-                    queue_loss = manager.Queue()
-                    mp.spawn(fn=store_netlist_loss, args=(args, model, batched_netlist_dis_angle, queue_loss), 
-                             nprocs=len(batched_netlist_dis_angle))
-                    losses = []
-                    while queue_loss.qsize():
-                        losses.append(queue_loss.get())
-                    print(losses)
-                    sum(losses).backward()
-                    optimizer.step()
-                exit(123)
-            print(f"\tTraining time per epoch: {time() - t1}")
-
         def evaluate(list_netlist_dis_angle: List[Tuple[Netlist, DIS_ANGLE_TYPE]],
                      dataset_name: str, netlist_names: List[str], verbose=True) -> float:
             model.eval()
@@ -210,7 +168,6 @@ def pretrain_ours(
         if epoch:
             for _ in range(args.train_epoch):
                 train(train_list_netlist_dis_angle)
-#                 train_batch(batched_train_list_netlist_dis_angle)
                 scheduler.step()
         logs[-1].update({'train_time': time() - t0})
         t2 = time()
