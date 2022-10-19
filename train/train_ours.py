@@ -1,4 +1,5 @@
 import argparse
+from copy import copy
 import numpy as np
 import torch
 import json
@@ -10,8 +11,12 @@ from tqdm import tqdm
 from data.graph import Netlist, Layout, expand_netlist, sequentialize_netlist, assemble_layout
 from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis_angle
 from data.utils import set_seed, mean_dict
-from train.model import NaiveGNN
+from train.model import NaiveGNN,placeGNN
 from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, MacroOverlapLoss, SampleNetOverlapLoss
+from gpu_mem_track import MemTracker
+import gc
+import dgl
+from pympler import asizeof
 
 
 def train_ours(
@@ -32,6 +37,7 @@ def train_ours(
     set_seed(args.seed, use_cuda=use_cuda)
 
     # Load data
+    # torch.autograd.set_detect_anomaly(True)
     print(f'Loading data...')
     train_netlists = [netlist_from_numpy_directory(dataset) for dataset in train_datasets]
     valid_netlists = [netlist_from_numpy_directory(dataset) for dataset in valid_datasets]
@@ -52,12 +58,17 @@ def train_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
+        'NUM_LAYERS': 3,
+        'NUM_HEADS': 8,
     }
 
     if args.gnn == 'naive':
         model = NaiveGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
+    elif args.gnn == 'place':
+        model = placeGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
     else:
         assert False, f'Undefined GNN {args.gnn}'
+    gpu_tracker = MemTracker()
 
     if args.model:
         print(f'\tUsing model model/{args.model}.pkl')
@@ -78,7 +89,7 @@ def train_ours(
     evaluate_cell_pos_dict = {}
     sample_overlap_loss_op = SampleOverlapLoss(span=4)
     macro_overlap_loss_op = MacroOverlapLoss(max_cap=50)
-    area_loss_op = AreaLoss()
+    area_loss_op = AreaLoss(device)
     hpwl_loss_op = HPWLLoss(device)
     cong_loss_op = SampleNetOverlapLoss(device, span=4)
 
@@ -89,7 +100,8 @@ def train_ours(
 
         def forward(netlist: Netlist) -> Tuple[Layout, torch.Tensor]:
             edge_dis, edge_angle = model.forward(netlist)
-            layout, dis_loss = layout_from_netlist_dis_angle(netlist, edge_dis, edge_angle)
+            # edge_dis, edge_angle = model.forward(netlist.graph,(netlist.cell_prop_dict['feat'],netlist.net_prop_dict['feat'],netlist.pin_prop_dict['feat']))
+            layout, dis_loss = layout_from_netlist_dis_angle(netlist, edge_dis.cpu(), edge_angle.cpu())
             return layout, dis_loss
 
         def train(netlists: List[Netlist]):
@@ -100,26 +112,81 @@ def train_ours(
             n_netlist = len(seq_netlists)
             iter_i_netlist = tqdm(enumerate(seq_netlists), total=n_netlist) \
                 if use_tqdm else enumerate(seq_netlists)
+
+            ###############
+            batch_graph = []
+            batch_netlist = []
+            total_batch_nodes_num = 0
+            total_batch_edge_idx = 0
+            batch_cell_feature = []
+            batch_net_feature = []
+            batch_pin_feature = []
+            sub_netlist_feature_idrange = []
+            ##################
             for j, netlist in iter_i_netlist:
-                layout, dis_loss = forward(netlist)
-                sample_overlap_loss = sample_overlap_loss_op.forward(layout)
-                macro_overlap_loss = macro_overlap_loss_op.forward(layout)
-                overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
-                area_loss = area_loss_op.forward(layout, limit=[-5e4, -5e4, 5e4, 5e4])
-                hpwl_loss = hpwl_loss_op.forward(layout)
-                # cong_loss = cong_loss_op.forward(layout)
-                loss = sum((
-                    args.dis_lambda * dis_loss,
-                    args.overlap_lambda * overlap_loss,
-                    args.area_lambda * area_loss,
-                    args.hpwl_lambda * hpwl_loss,
-                    # args.cong_lambda * cong_loss,
-                ))
-                losses.append(loss)
-                if len(losses) >= args.batch or j == n_netlist - 1:
+
+                ############
+                #################
+                batch_netlist.append(netlist)
+                father,_ = netlist.graph.edges(etype='points-to')
+                edge_idx_num = father.size(0)
+                sub_netlist_feature_idrange.append([total_batch_edge_idx,total_batch_edge_idx+edge_idx_num])
+                total_batch_edge_idx += edge_idx_num
+                total_batch_nodes_num += netlist.graph.num_nodes('cell')
+                batch_cell_feature.append(netlist.cell_prop_dict['feat'])
+                batch_net_feature.append(netlist.net_prop_dict['feat'])
+                batch_pin_feature.append(netlist.pin_prop_dict['feat'])
+                if total_batch_nodes_num > 10000 or j == n_netlist - 1:
+                    batch_cell_feature = torch.vstack(batch_cell_feature)
+                    batch_net_feature = torch.vstack(batch_net_feature)
+                    batch_pin_feature = torch.vstack(batch_pin_feature)
+                    batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
+                    batch_edge_dis,batch_edge_angle = model.forward(batch_graph,(batch_cell_feature,batch_net_feature,batch_pin_feature))
+                    # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                    for nid,sub_netlist in enumerate(batch_netlist):
+                        begin_idx,end_idx = sub_netlist_feature_idrange[nid]
+                        edge_dis,edge_angle = batch_edge_dis[begin_idx:end_idx],batch_edge_angle[begin_idx:end_idx]
+                        layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist, edge_dis, edge_angle)
+                        sample_overlap_loss = sample_overlap_loss_op.forward(layout)
+                        macro_overlap_loss = macro_overlap_loss_op.forward(layout)
+                        overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
+                        area_loss = area_loss_op.forward(layout, limit=[-5e4, -5e4, 5e4, 5e4])
+                        hpwl_loss = hpwl_loss_op.forward(layout)
+                        assert not torch.isnan(dis_loss),f"{dis_loss}"
+                        assert not torch.isnan(hpwl_loss) 
+                        assert not torch.isnan(area_loss) 
+                        assert not torch.isnan(macro_overlap_loss) 
+                        assert not torch.isnan(sample_overlap_loss)
+                        assert not torch.isinf(dis_loss),f"{dis_loss}"
+                        assert not torch.isinf(hpwl_loss) 
+                        assert not torch.isinf(area_loss) 
+                        assert not torch.isinf(macro_overlap_loss) 
+                        assert not torch.isinf(sample_overlap_loss)
+                        loss = sum((
+                        args.dis_lambda * dis_loss,
+                        args.overlap_lambda * overlap_loss,
+                        args.area_lambda * area_loss,
+                        args.hpwl_lambda * hpwl_loss,
+                        # args.cong_lambda * cong_loss,
+                        ))
+                        losses.append(loss)
+                        # if len(losses) >= args.batch:
                     sum(losses).backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=20, norm_type=2)
                     optimizer.step()
                     losses.clear()
+                    batch_netlist = []
+                    sub_netlist_feature_idrange = []
+                    total_batch_nodes_num = 0
+                    total_batch_edge_idx = 0
+                    batch_cell_feature = []
+                    batch_net_feature = []
+                    batch_pin_feature = []
+                    torch.cuda.empty_cache()
+                    
+
+                #################
+                ##############
             print(f"\tTraining time per epoch: {time() - t1}")
 
         def evaluate(netlists: List[Netlist], dataset_name: str, netlist_names: List[str], verbose=True) -> float:
@@ -132,18 +199,115 @@ def train_ours(
             for netlist_name, netlist in iter_name_netlist:
                 print(f'\tFor {netlist_name}:')
                 dict_netlist = expand_netlist(netlist)
+                iter_i_sub_netlist = tqdm(dict_netlist.items(), total=len(dict_netlist.items()), leave=False) \
+                if use_tqdm else dict_netlist.items()
+                total_len = len(dict_netlist.items())
+                all_dict_netlist = dict_netlist.items()
                 dni = {}  # dict_netlist_info
-                for nid, sub_netlist in dict_netlist.items():
+
+                ###############
+                #################
+                batch_graph = []
+                batch_netlist = []
+                total_batch_nodes_num = 0
+                total_batch_edge_idx = 0
+                batch_cell_feature = []
+                batch_net_feature = []
+                batch_pin_feature = []
+                sub_netlist_feature_idrange = []
+                cnt = 0
+                #################
+                ##################
+                for nid, sub_netlist in iter_i_sub_netlist:
                     dni[nid] = {}
-                    dni[nid]['layout'], dni[nid]['dis_loss'] = forward(sub_netlist)
-                    dni[nid]['sample_overlap_loss'] = sample_overlap_loss_op.forward(dni[nid]['layout'])
-                    dni[nid]['macro_overlap_loss'] = macro_overlap_loss_op.forward(dni[nid]['layout'])
-                    dni[nid]['overlap_loss'] = dni[nid]['sample_overlap_loss'] + dni[nid]['macro_overlap_loss'] * 10
-                    dni[nid]['area_loss'] = area_loss_op.forward(dni[nid]['layout'],
-                                                                 limit=[0, 0, *dni[nid]['layout'].netlist.layout_size])
-                    dni[nid]['hpwl_loss'] = hpwl_loss_op.forward(dni[nid]['layout'])
-                    dni[nid]['cong_loss'] = cong_loss_op.forward(dni[nid]['layout'])
-                layout = assemble_layout({nid: nif['layout'] for nid, nif in dni.items()}, device=device)
+                    #################
+                    #################
+                    batch_netlist.append(nid)
+                    father,_ = sub_netlist.graph.edges(etype='points-to')
+                    edge_idx_num = father.size(0)
+                    sub_netlist_feature_idrange.append([total_batch_edge_idx,total_batch_edge_idx+edge_idx_num])
+                    total_batch_edge_idx += edge_idx_num
+                    total_batch_nodes_num += sub_netlist.graph.num_nodes('cell')
+                    batch_cell_feature.append(sub_netlist.cell_prop_dict['feat'])
+                    batch_net_feature.append(sub_netlist.net_prop_dict['feat'])
+                    batch_pin_feature.append(sub_netlist.pin_prop_dict['feat'])
+                    if total_batch_nodes_num > 10000 or cnt == total_len - 1:
+                        batch_cell_feature = torch.vstack(batch_cell_feature)
+                        batch_net_feature = torch.vstack(batch_net_feature)
+                        batch_pin_feature = torch.vstack(batch_pin_feature)
+                        batch_graph = []
+                        for nid_ in batch_netlist:
+                            netlist = dict_netlist[nid_]
+                            batch_graph.append(netlist.graph)
+                        # batch_graph = dgl.batch([sub_netlist.graph for _,sub_netlist in batch_netlist])
+                        batch_graph = dgl.batch(batch_graph)
+                        batch_edge_dis,batch_edge_angle = model.forward(batch_graph,(batch_cell_feature,batch_net_feature,batch_pin_feature))
+                        # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                        for j,nid_ in enumerate(batch_netlist):
+                            sub_netlist_ = dict_netlist[nid_]
+                            begin_idx,end_idx = sub_netlist_feature_idrange[j]
+                            edge_dis,edge_angle = batch_edge_dis[begin_idx:end_idx],batch_edge_angle[begin_idx:end_idx]
+                            layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist_, edge_dis, edge_angle)
+                            dni[nid_]['dis_loss'] = float(dis_loss.cpu().clone().detach().data)
+                            sample_overlap_loss = (sample_overlap_loss_op.forward(layout).cpu().clone().detach())
+                            dni[nid_]['sample_overlap_loss'] = sample_overlap_loss.data
+                            macro_overlap_loss = (macro_overlap_loss_op.forward(layout).cpu().clone().detach())
+                            dni[nid_]['macro_overlap_loss'] = float(macro_overlap_loss.data)
+                            dni[nid_]['overlap_loss'] = dni[nid_]['sample_overlap_loss'] + dni[nid_]['macro_overlap_loss'] * 10
+                            area_loss = (area_loss_op.forward(layout,
+                                                                        limit=[0, 0, *layout.netlist.layout_size]).cpu().clone().detach())
+                            dni[nid_]['area_loss'] = float(area_loss.data)
+                            hpwl_loss = (hpwl_loss_op.forward(layout).cpu().clone().detach())#
+                            dni[nid_]['hpwl_loss'] = hpwl_loss.data
+                            cong_loss = (cong_loss_op.forward(layout).cpu().clone().detach())
+                            dni[nid_]['cong_loss'] = float(cong_loss.data)
+                            dni[nid_]['cell_pos'] = copy(layout.cell_pos)
+                            assert not torch.isnan(dis_loss)
+                            assert not torch.isnan(cong_loss) 
+                            assert not torch.isnan(hpwl_loss) 
+                            assert not torch.isnan(area_loss) 
+                            assert not torch.isnan(macro_overlap_loss) 
+                            assert not torch.isnan(sample_overlap_loss)
+                            assert not torch.isinf(dis_loss)
+                            assert not torch.isinf(cong_loss) 
+                            assert not torch.isinf(hpwl_loss) 
+                            assert not torch.isinf(area_loss) 
+                            assert not torch.isinf(macro_overlap_loss) 
+                            assert not torch.isinf(sample_overlap_loss)
+                        batch_netlist = []
+                        sub_netlist_feature_idrange = []
+                        total_batch_nodes_num = 0
+                        total_batch_edge_idx = 0
+                        batch_cell_feature = []
+                        batch_net_feature = []
+                        batch_pin_feature = []
+                    cnt+=1
+                    #################
+                    ################# 
+                    # del dis_loss
+                    # del layout
+                    # del cong_loss
+                    # del hpwl_loss
+                    # del area_loss
+                    # del macro_overlap_loss
+                    # del sample_overlap_loss
+                    torch.cuda.empty_cache()
+                def assemble_layout_new(dict_netlist_info, dict_netlist, device) -> Layout:
+                    original_netlist: Netlist = dict_netlist[-1].original_netlist
+                    cell_pos = torch.zeros(
+                        size=[original_netlist.graph.num_nodes(ntype='cell') + len(dict_netlist_info) - 1, 2],
+                        dtype=torch.float32, device=device
+                    )
+                    if len(dict_netlist_info) == 1:
+                        #TODO: 直接生成layout
+                        pass
+                    else:
+                        for nid, sub_netlist in dict_netlist.items():
+                            cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = dict_netlist_info[nid]['cell_pos']
+                        layout = Layout(original_netlist, cell_pos[:original_netlist.graph.num_nodes(ntype='cell'), :])
+                    return layout
+                layout = assemble_layout_new(dni,dict_netlist,device=device)
+                # layout = assemble_layout({nid: nif['layout'] for nid, nif in dni.items()}, device=torch.device("cpu"))
                 dis_loss = sum(v['dis_loss'] for v in dni.values())
                 sample_overlap_loss = sum(v['sample_overlap_loss'] for v in dni.values())
                 macro_overlap_loss = sum(v['macro_overlap_loss'] for v in dni.values())
@@ -158,26 +322,28 @@ def train_ours(
                     args.hpwl_lambda * hpwl_loss,
                     # args.cong_lambda * cong_loss,
                 ))
-                print(f'\t\tDiscrepancy Loss: {dis_loss.data}')
-                print(f'\t\tSample Overlap Loss: {sample_overlap_loss.data}')
-                print(f'\t\tMacro Overlap Loss: {macro_overlap_loss.data}')
-                print(f'\t\tTotal Overlap Loss: {overlap_loss.data}')
-                print(f'\t\tArea Loss: {area_loss.data}')
-                print(f'\t\tHPWL Loss: {hpwl_loss.data}')
-                print(f'\t\tCongestion Loss: {cong_loss.data}')
-                print(f'\t\tTotal Loss: {loss.data}')
+                print(f'\t\tDiscrepancy Loss: {dis_loss}')
+                print(f'\t\tSample Overlap Loss: {sample_overlap_loss}')
+                print(f'\t\tMacro Overlap Loss: {macro_overlap_loss}')
+                print(f'\t\tTotal Overlap Loss: {overlap_loss}')
+                print(f'\t\tArea Loss: {area_loss}')
+                print(f'\t\tHPWL Loss: {hpwl_loss}')
+                print(f'\t\tCongestion Loss: {cong_loss}')
+                print(f'\t\tTotal Loss: {loss}')
                 d = {
-                    f'{dataset_name}_dis_loss': float(dis_loss.data),
-                    f'{dataset_name}_sample_overlap_loss': float(sample_overlap_loss.data),
-                    f'{dataset_name}_macro_overlap_loss': float(macro_overlap_loss.data),
-                    f'{dataset_name}_overlap_loss': float(overlap_loss.data),
-                    f'{dataset_name}_area_loss': float(area_loss.data),
-                    f'{dataset_name}_hpwl_loss': float(hpwl_loss.data),
-                    f'{dataset_name}_cong_loss': float(cong_loss.data),
-                    f'{dataset_name}_loss': float(loss.data),
+                    f'{dataset_name}_dis_loss': float(dis_loss),
+                    f'{dataset_name}_sample_overlap_loss': float(sample_overlap_loss),
+                    f'{dataset_name}_macro_overlap_loss': float(macro_overlap_loss),
+                    f'{dataset_name}_overlap_loss': float(overlap_loss),
+                    f'{dataset_name}_area_loss': float(area_loss),
+                    f'{dataset_name}_hpwl_loss': float(hpwl_loss),
+                    # f'{dataset_name}_cong_loss': float(cong_loss),
+                    f'{dataset_name}_loss': float(loss),
                 }
                 ds.append(d)
                 evaluate_cell_pos_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy()
+                del loss
+                torch.cuda.empty_cache()
 
             logs[-1].update(mean_dict(ds))
             return logs[-1][f'{dataset_name}_loss']
