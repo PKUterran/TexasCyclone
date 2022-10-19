@@ -55,13 +55,15 @@ def train_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
-        'NUM_LAYERS': 1,
-        'NUM_HEADS': 2,
     }
 
     if args.gnn == 'naive':
         model = NaiveGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
     elif args.gnn == 'place':
+        config.update({
+            'NUM_LAYERS': 1,
+            'NUM_HEADS': 2,
+        })
         model = PlaceGNN(raw_cell_feats, raw_net_feats, raw_pin_feats, config)
     else:
         assert False, f'Undefined GNN {args.gnn}'
