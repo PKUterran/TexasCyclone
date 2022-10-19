@@ -3,7 +3,7 @@ import torch
 import torch.sparse as sparse
 import pickle
 import dgl
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 
 import os, sys
 sys.path.append(os.path.abspath('.'))
@@ -65,3 +65,27 @@ def assemble_layout(dict_layout: Dict[int, Layout], device) -> Layout:
             cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = sub_layout.cell_pos
         layout = Layout(original_netlist, cell_pos[:original_netlist.graph.num_nodes(ntype='cell'), :])
     return layout
+
+
+def assemble_layout_with_netlist_info(dict_netlist_info: Dict[int, Dict[str, Any]], dict_netlist: Dict[int, Netlist],
+                                      device) -> Layout:
+    original_netlist: Netlist = dict_netlist[-1].original_netlist
+    cell_pos = torch.zeros(
+        size=[original_netlist.graph.num_nodes(ntype='cell') + len(dict_netlist_info) - 1, 2],
+        dtype=torch.float32, device=device
+    )
+    if len(dict_netlist_info) == 1:
+        # TODO: 直接生成layout
+        raise NotImplementedError
+    else:
+        for nid, sub_netlist in dict_netlist.items():
+            if nid == -1:
+                cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = dict_netlist_info[nid]['cell_pos']
+            else:
+                abs_cell_pos = dict_netlist_info[nid]['cell_pos'] + \
+                               dict_netlist_info[-1]['cell_pos'][nid, :] - \
+                               torch.tensor(dict_netlist[-1].layout_size, dtype=torch.float32, device=device)
+                cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = abs_cell_pos
+        layout = Layout(original_netlist, cell_pos[:original_netlist.graph.num_nodes(ntype='cell'), :])
+    return layout
+
