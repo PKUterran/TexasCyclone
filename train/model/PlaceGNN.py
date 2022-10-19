@@ -106,10 +106,8 @@ class HeteroGraphConvLayers(nn.Module):
         self.hidden_net_feats = hidden_net_feats
         self.hidden_pin_feats = hidden_pin_feats
 
-        self.hetero_graph_conv_layers = []
-
-        for _ in range(num_layers):
-            hetero_conv = HeteroGraphConv({
+        self.hetero_graph_conv_layers = nn.ModuleList([
+            HeteroGraphConv({
                 'pins':
                     HyperEdgeConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                                   hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats,
@@ -117,10 +115,8 @@ class HeteroGraphConvLayers(nn.Module):
                 'pinned':  # GraphConv(in_feats=self.hidden_net_feats, out_feats=self.hidden_cell_feats),
                     CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                            hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-            }, aggregate='max').to(device)
-            self.hetero_graph_conv_layers.append(
-                hetero_conv
-            )
+            }, aggregate='max') for _ in range(num_layers)]).to(device)
+
         self.device = device
         self.to(self.device)
 
