@@ -295,7 +295,7 @@ def train_ours(
                     f'{dataset_name}_overlap_loss': float(overlap_loss),
                     f'{dataset_name}_area_loss': float(area_loss),
                     f'{dataset_name}_hpwl_loss': float(hpwl_loss),
-                    # f'{dataset_name}_cong_loss': float(cong_loss),
+                    f'{dataset_name}_cong_loss': float(cong_loss),
                     f'{dataset_name}_loss': float(loss),
                 }
                 ds.append(d)
