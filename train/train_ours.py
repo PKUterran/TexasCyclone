@@ -159,7 +159,7 @@ def train_ours(
                         ))
                         losses.append(loss)
                         # if len(losses) >= args.batch:
-                    sum(losses).backward()
+                    (sum(losses) / len(losses)).backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=20, norm_type=2)
                     optimizer.step()
                     losses.clear()
@@ -240,17 +240,17 @@ def train_ours(
                             dni[nid_]['area_loss'] = float(area_loss.data)
                             hpwl_loss = hpwl_loss_op.forward(layout).cpu().clone().detach()
                             dni[nid_]['hpwl_loss'] = hpwl_loss.data
-                            cong_loss = cong_loss_op.forward(layout).cpu().clone().detach()
-                            dni[nid_]['cong_loss'] = float(cong_loss.data)
+                            # cong_loss = cong_loss_op.forward(layout).cpu().clone().detach()
+                            # dni[nid_]['cong_loss'] = float(cong_loss.data)
                             dni[nid_]['cell_pos'] = copy(layout.cell_pos)
                             assert not torch.isnan(dis_loss)
-                            assert not torch.isnan(cong_loss)
+                            # assert not torch.isnan(cong_loss)
                             assert not torch.isnan(hpwl_loss)
                             assert not torch.isnan(area_loss)
                             assert not torch.isnan(macro_overlap_loss)
                             assert not torch.isnan(sample_overlap_loss)
                             assert not torch.isinf(dis_loss)
-                            assert not torch.isinf(cong_loss)
+                            # assert not torch.isinf(cong_loss)
                             assert not torch.isinf(hpwl_loss)
                             assert not torch.isinf(area_loss)
                             assert not torch.isinf(macro_overlap_loss)
@@ -266,13 +266,13 @@ def train_ours(
                     torch.cuda.empty_cache()
                 layout = assemble_layout_with_netlist_info(dni, dict_netlist, device=device)
                 # layout = assemble_layout({nid: nif['layout'] for nid, nif in dni.items()}, device=torch.device("cpu"))
-                dis_loss = sum(v['dis_loss'] for v in dni.values())
-                sample_overlap_loss = sum(v['sample_overlap_loss'] for v in dni.values())
-                macro_overlap_loss = sum(v['macro_overlap_loss'] for v in dni.values())
-                overlap_loss = sum(v['overlap_loss'] for v in dni.values())
-                area_loss = sum(v['area_loss'] for v in dni.values())
-                hpwl_loss = sum(v['hpwl_loss'] for v in dni.values())
-                cong_loss = sum(v['cong_loss'] for v in dni.values())
+                dis_loss = sum(v['dis_loss'] for v in dni.values()) / len(dni)
+                sample_overlap_loss = sum(v['sample_overlap_loss'] for v in dni.values()) / len(dni)
+                macro_overlap_loss = sum(v['macro_overlap_loss'] for v in dni.values()) / len(dni)
+                overlap_loss = sum(v['overlap_loss'] for v in dni.values()) / len(dni)
+                area_loss = sum(v['area_loss'] for v in dni.values()) / len(dni)
+                hpwl_loss = sum(v['hpwl_loss'] for v in dni.values()) / len(dni)
+                # cong_loss = sum(v['cong_loss'] for v in dni.values()) / len(dni)
                 loss = sum((
                     args.dis_lambda * dis_loss,
                     args.overlap_lambda * overlap_loss,
@@ -286,7 +286,7 @@ def train_ours(
                 print(f'\t\tTotal Overlap Loss: {overlap_loss}')
                 print(f'\t\tArea Loss: {area_loss}')
                 print(f'\t\tHPWL Loss: {hpwl_loss}')
-                print(f'\t\tCongestion Loss: {cong_loss}')
+                # print(f'\t\tCongestion Loss: {cong_loss}')
                 print(f'\t\tTotal Loss: {loss}')
                 d = {
                     f'{dataset_name}_dis_loss': float(dis_loss),
@@ -295,7 +295,7 @@ def train_ours(
                     f'{dataset_name}_overlap_loss': float(overlap_loss),
                     f'{dataset_name}_area_loss': float(area_loss),
                     f'{dataset_name}_hpwl_loss': float(hpwl_loss),
-                    f'{dataset_name}_cong_loss': float(cong_loss),
+                    # f'{dataset_name}_cong_loss': float(cong_loss),
                     f'{dataset_name}_loss': float(loss),
                 }
                 ds.append(d)
