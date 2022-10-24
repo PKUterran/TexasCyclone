@@ -24,11 +24,11 @@ def parse_train_args() -> argparse.Namespace:
 
     # Model settings
     args_parser.add_argument(
-        '--gnn', type=str, default='place',
+        '--gnn', type=str, default='naive',
         help='GNN model'
     )
     args_parser.add_argument(
-        '--model', type=str, default='pre-default',
+        '--model', type=str, default='',
         help='name of reused model, empty if training a new model'
     )
     args_parser.add_argument(
@@ -121,7 +121,7 @@ def parse_pretrain_args() -> argparse.Namespace:
 
     # Model settings
     args_parser.add_argument(
-        '--gnn', type=str, default='place',
+        '--gnn', type=str, default='naive',
         help='GNN model'
     )
     args_parser.add_argument(
