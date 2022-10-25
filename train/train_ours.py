@@ -300,7 +300,7 @@ def train_ours(
                     f'{dataset_name}_loss': float(loss),
                 }
                 ds.append(d)
-                evaluate_cell_pos_corner_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy()
+                evaluate_cell_pos_corner_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy() / 2
                 del loss
                 torch.cuda.empty_cache()
 

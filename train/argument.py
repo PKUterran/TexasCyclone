@@ -78,7 +78,7 @@ def parse_train_args() -> argparse.Namespace:
         help='weight of discrepancy loss'
     )
     args_parser.add_argument(
-        '--overlap_lambda', type=float, default=1e0,
+        '--overlap_lambda', type=float, default=1e1,
         help='weight of overlap loss'
     )
     args_parser.add_argument(
