@@ -133,7 +133,7 @@ class Netlist:
             sub_graph_net_degree_dict_list[sub_graph_id].setdefault(int(net_id),0)
             sub_graph_net_degree_dict_list[sub_graph_id][int(net_id)] += 1
         ###########
-        for i,partition in enumerate(iter_partition_list):
+        for i, partition in enumerate(iter_partition_list):
             if len(partition) <= 1:
                 continue
             partition_set = set(partition)
@@ -149,7 +149,7 @@ class Netlist:
             keep_nets_id = np.array(list(new_net_degree_dict.keys()))
             keep_nets_degree = np.array(list(new_net_degree_dict.values()))
             good_nets = np.abs(self.net_prop_dict['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
-            good_nets_id = torch.tensor(keep_nets_id)[good_nets]#numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
+            good_nets_id = torch.tensor(keep_nets_id)[good_nets]  # numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
             sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id})
             sub_netlist = Netlist(
                 graph=sub_graph,
@@ -180,7 +180,7 @@ class Netlist:
             self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
             ref_pos = torch.mean(sub_netlist.cell_prop_dict['ref_pos'], dim=0)
             sub_netlist.cell_prop_dict['ref_pos'] -= \
-                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32)
+                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32) / 2
             #################
             '''
             这个地方感觉append可能会慢所以修改了一下实现
@@ -189,14 +189,14 @@ class Netlist:
             pseudo_cell_size.append(sub_netlist.layout_size)
             pseudo_cell_degree.append(len(keep_nets_id) - len(good_nets_id))
             # pseudo_pin_pos.extend([[0, 0] for _ in range(len(keep_nets_id))])
-            if pseudo_cell_ref_pos == []:
+            if len(pseudo_cell_ref_pos) == 0:
                 pseudo_cell_ref_pos = ref_pos
             else:
-                pseudo_cell_ref_pos = torch.vstack([pseudo_cell_ref_pos,ref_pos])
-            if pseudo_pin_pos == []:
-                pseudo_pin_pos = torch.zeros([len(keep_nets_id),2])
+                pseudo_cell_ref_pos = torch.vstack([pseudo_cell_ref_pos, ref_pos])
+            if len(pseudo_pin_pos) == 0:
+                pseudo_pin_pos = torch.zeros([len(keep_nets_id), 2])
             else:
-                pseudo_pin_pos = torch.zeros([pseudo_pin_pos.size(0)+len(keep_nets_id),2])
+                pseudo_pin_pos = torch.zeros([pseudo_pin_pos.size(0)+len(keep_nets_id), 2])
             #######################
             temp_n_cell += 1
 

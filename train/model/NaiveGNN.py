@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import dgl
 from typing import Tuple, Dict, Any
 from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv
 
@@ -32,8 +33,8 @@ class NaiveGNN(nn.Module):
             'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats),
             'pinned': CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                              hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-#             'points-to': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-#             'pointed-from': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+            # 'points-to': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+            # 'pointed-from': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
         }, aggregate='max')
 
         self.edge_dis_readout = nn.Linear(2 * self.hidden_cell_feats, 1)
@@ -42,25 +43,39 @@ class NaiveGNN(nn.Module):
 
     def forward(
             self,
-            netlist: Netlist
+            graph: dgl.DGLHeteroGraph,
+            feature: Tuple[torch.tensor, torch.tensor, torch.tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        cell_feat = netlist.cell_prop_dict['feat'].to(self.device)
-        net_feat = netlist.net_prop_dict['feat'].to(self.device)
-        pin_feat = netlist.pin_prop_dict['feat'].to(self.device)
+        cell_feat, net_feat, pin_feat = feature
+        cell_feat = cell_feat.to(self.device)
+        net_feat = net_feat.to(self.device)
+        pin_feat = pin_feat.to(self.device)
         hidden_cell_feat = torch.tanh(self.cell_lin(cell_feat))
         hidden_net_feat = torch.tanh(self.net_lin(net_feat))
         hidden_pin_feat = torch.tanh(self.pin_lin(pin_feat))
 
         h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
-        graph = netlist.graph.to(self.device)
-        h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins', 'pinned']), h, mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})
-        hidden_cell_feat, hidden_net_feat = h['cell'], h['net']
+        h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)
+        h = {'cell': hidden_cell_feat, 'net': h['net']}
+        h = self.hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
+                                     mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})
+        hidden_cell_feat = h['cell']
 
         fathers, sons = graph.edges(etype='points-to')
         hidden_cell_pair_feat = torch.cat([
             hidden_cell_feat[fathers, :],
             hidden_cell_feat[sons, :]
         ], dim=-1)
-        edge_dis = torch.exp(self.edge_dis_readout(hidden_cell_pair_feat)).view(-1)
+        edge_dis = torch.exp(12 * torch.tanh(self.edge_dis_readout(hidden_cell_pair_feat))).view(-1)
         edge_angle = torch.tanh(self.edge_angle_readout(hidden_cell_pair_feat)).view(-1) * 4
         return edge_dis, edge_angle
+
+    def forward_with_netlist(
+            self,
+            netlist: Netlist
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        graph = netlist.graph
+        cell_feat = netlist.cell_prop_dict['feat']
+        net_feat = netlist.net_prop_dict['feat']
+        pin_feat = netlist.pin_prop_dict['feat']
+        return self.forward(graph, (cell_feat, net_feat, pin_feat))

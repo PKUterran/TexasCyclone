@@ -30,9 +30,9 @@ def netlist_from_numpy_directory(
 
     n_cell, n_net = cell_data.shape[0], net_data.shape[0]
     if os.path.exists(f'{dir_name}/cell_pos.npy'):
-        cells_pos = np.load(f'{dir_name}/cell_pos.npy')
+        cells_pos_corner = np.load(f'{dir_name}/cell_pos.npy')
     else:
-        cells_pos = np.zeros(shape=[n_cell, 2], dtype=np.float)
+        cells_pos_corner = np.zeros(shape=[n_cell, 2], dtype=np.float)
     if os.path.exists(f'{dir_name}/cell_clusters.json'):
         with open(f'{dir_name}/cell_clusters.json') as fp:
             cell_clusters = json.load(fp)
@@ -45,10 +45,10 @@ def netlist_from_numpy_directory(
         layout_size = None
     cells = list(pin_net_cell[:, 1])
     nets = list(pin_net_cell[:, 0])
-    cells_ref_pos = torch.tensor(cells_pos, dtype=torch.float32)
     cells_size = torch.tensor(cell_data[:, [1, 2]], dtype=torch.float32)
     cells_degree = torch.tensor(cell_data[:, 0], dtype=torch.float32).unsqueeze(-1)
     cells_type = torch.tensor(cell_data[:, 3], dtype=torch.float32).unsqueeze(-1)
+    cells_ref_pos = torch.tensor(cells_pos_corner, dtype=torch.float32) + cells_size / 2
     cells_pos = cells_ref_pos.clone()
     cells_pos[cells_type[:, 0] < 1e-5, :] = torch.nan
     nets_degree = torch.tensor(net_data, dtype=torch.float32).unsqueeze(-1)
@@ -135,31 +135,40 @@ def layout_from_netlist_ref(netlist: Netlist) -> Layout:
 if __name__ == '__main__':
     # netlist_ = netlist_from_numpy_directory('test/dataset1/medium', save_type=2)
     netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
+    print(netlist_.original_netlist.graph)
     print(netlist_.graph)
     # print(netlist_.cell_prop_dict)
     # print(netlist_.net_prop_dict)
     # print(netlist_.pin_prop_dict)
-    print(netlist_.n_cell, netlist_.n_net, netlist_.n_pin)
+    # print(netlist_.n_cell, netlist_.n_net, netlist_.n_pin)
     # print(netlist_.cell_flow.fathers_list)
     # for _, edges in enumerate(netlist_.cell_flow.flow_edge_indices):
     #     print(f'{_}: {edges}')
+    print('flow edges:', len(netlist_.cell_flow.flow_edge_indices))
+    print('path depth:', sum(map(lambda x: sum(map(lambda y: len(y), x)), netlist_.cell_flow.cell_paths)))
     # print(netlist_.cell_flow.cell_paths)
     # print(netlist_.cell_path_edge_matrix.to_dense().numpy())
     # print(netlist_.path_cell_matrix.to_dense().numpy())
     # print(netlist_.path_edge_matrix.to_dense().numpy())
     # print(netlist_.graph.edges(etype='points-to'))
+    cnt = 0
     for k, v in netlist_.dict_sub_netlist.items():
         print(f'{k}:')
         print('\t', v.graph)
         # print('\t', v.cell_prop_dict)
         # print('\t', v.net_prop_dict)
         # print('\t', v.pin_prop_dict)
-        print('\t', v.n_cell, v.n_net, v.n_pin)
+        # print('\t', v.n_cell, v.n_net, v.n_pin)
         # print('\t', v.cell_flow.fathers_list)
         # for _, edges in enumerate(v.cell_flow.flow_edge_indices):
         #     print('\t', f'{_}: {edges}')
+        print('\tflow edges:', len(v.cell_flow.flow_edge_indices))
+        print('\tpath depth:', sum(map(lambda x: sum(map(lambda y: len(y), x)), v.cell_flow.cell_paths)))
         # print('\t', v.cell_flow.cell_paths)
         # print(v.cell_path_edge_matrix.to_dense().numpy())
         # print(v.path_cell_matrix.to_dense().numpy())
         # print(v.path_edge_matrix.to_dense().numpy())
         # print(v.graph.edges(etype='points-to'))
+        cnt += 1
+        if cnt >= 10:
+            break
