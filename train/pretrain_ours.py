@@ -148,11 +148,11 @@ def pretrain_ours(
                                                    torch.log(dis_angle[0].to(device) + 1)) ** 0.5
                         edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device)) ** 0.5
                         loss = sum((
-                            edge_dis_loss * 0.101,
-                            edge_angle_loss * 1.1,
+                            edge_dis_loss * 1.0,
+                            edge_angle_loss * 0.1,
                         ))
                         losses.append(loss)
-                    sum(losses).backward()
+                    (sum(losses) / len(losses)).backward()
                     optimizer.step()
                     losses.clear()
                     batch_netlist = []
@@ -222,8 +222,8 @@ def pretrain_ours(
                                                    torch.log(dis_angle[0].to(device) + 1)) ** 0.5
                         edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device)) ** 0.5
                         loss = sum((
-                            edge_dis_loss * 0.101,
-                            edge_angle_loss * 1.1,
+                            edge_dis_loss * 1.0,
+                            edge_angle_loss * 0.1,
                         ))
                         nid_ = batch_netlist[nid]
                         dni[nid_]['net_dis_loss'] = float(edge_dis_loss.data)
@@ -241,9 +241,9 @@ def pretrain_ours(
                     batch_dis = []
                     torch.cuda.empty_cache()
 
-            net_dis_loss = sum(v['net_dis_loss'] for v in dni.values()) / len(netlist_names)
-            net_angle_loss = sum(v['net_angle_loss'] for v in dni.values()) / len(netlist_names)
-            total_loss = sum(v['loss'] for v in dni.values()) / len(netlist_names)
+            net_dis_loss = sum(v['net_dis_loss'] for v in dni.values()) / len(dni)
+            net_angle_loss = sum(v['net_angle_loss'] for v in dni.values()) / len(dni)
+            total_loss = sum(v['loss'] for v in dni.values()) / len(dni)
             print(f'\t\tEdge Distance Loss: {net_dis_loss}')
             print(f'\t\tEdge Angle Loss: {net_angle_loss}')
             print(f'\t\tTotal Loss: {total_loss}')

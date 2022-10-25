@@ -55,17 +55,18 @@ class NaiveGNN(nn.Module):
         hidden_pin_feat = torch.tanh(self.pin_lin(pin_feat))
 
         h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
-        graph = graph.to(self.device)
-        h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins', 'pinned']), h,
+        h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)
+        h = {'cell': hidden_cell_feat, 'net': h['net']}
+        h = self.hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
                                      mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})
-        hidden_cell_feat, hidden_net_feat = h['cell'], h['net']
+        hidden_cell_feat = h['cell']
 
         fathers, sons = graph.edges(etype='points-to')
         hidden_cell_pair_feat = torch.cat([
             hidden_cell_feat[fathers, :],
             hidden_cell_feat[sons, :]
         ], dim=-1)
-        edge_dis = torch.exp(self.edge_dis_readout(hidden_cell_pair_feat)).view(-1)
+        edge_dis = torch.exp(12 * torch.tanh(self.edge_dis_readout(hidden_cell_pair_feat))).view(-1)
         edge_angle = torch.tanh(self.edge_angle_readout(hidden_cell_pair_feat)).view(-1) * 4
         return edge_dis, edge_angle
 

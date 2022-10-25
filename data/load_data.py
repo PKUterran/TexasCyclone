@@ -30,9 +30,9 @@ def netlist_from_numpy_directory(
 
     n_cell, n_net = cell_data.shape[0], net_data.shape[0]
     if os.path.exists(f'{dir_name}/cell_pos.npy'):
-        cells_pos = np.load(f'{dir_name}/cell_pos.npy')
+        cells_pos_corner = np.load(f'{dir_name}/cell_pos.npy')
     else:
-        cells_pos = np.zeros(shape=[n_cell, 2], dtype=np.float)
+        cells_pos_corner = np.zeros(shape=[n_cell, 2], dtype=np.float)
     if os.path.exists(f'{dir_name}/cell_clusters.json'):
         with open(f'{dir_name}/cell_clusters.json') as fp:
             cell_clusters = json.load(fp)
@@ -45,10 +45,10 @@ def netlist_from_numpy_directory(
         layout_size = None
     cells = list(pin_net_cell[:, 1])
     nets = list(pin_net_cell[:, 0])
-    cells_ref_pos = torch.tensor(cells_pos, dtype=torch.float32)
     cells_size = torch.tensor(cell_data[:, [1, 2]], dtype=torch.float32)
     cells_degree = torch.tensor(cell_data[:, 0], dtype=torch.float32).unsqueeze(-1)
     cells_type = torch.tensor(cell_data[:, 3], dtype=torch.float32).unsqueeze(-1)
+    cells_ref_pos = torch.tensor(cells_pos_corner, dtype=torch.float32) + cells_size / 2
     cells_pos = cells_ref_pos.clone()
     cells_pos[cells_type[:, 0] < 1e-5, :] = torch.nan
     nets_degree = torch.tensor(net_data, dtype=torch.float32).unsqueeze(-1)

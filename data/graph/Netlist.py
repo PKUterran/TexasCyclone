@@ -180,7 +180,7 @@ class Netlist:
             self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
             ref_pos = torch.mean(sub_netlist.cell_prop_dict['ref_pos'], dim=0)
             sub_netlist.cell_prop_dict['ref_pos'] -= \
-                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32)
+                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32) / 2
             #################
             '''
             这个地方感觉append可能会慢所以修改了一下实现

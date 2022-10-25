@@ -11,8 +11,9 @@ class AreaLoss(LossFunction):
     def forward(self, layout: Layout, *args, **kwargs) -> torch.Tensor:
         limit = kwargs['limit']
         cell_span = layout.cell_span
+        cell_size = layout.cell_size
         cell_span_excess = torch.relu(torch.cat([
-            torch.tensor(limit[:2], dtype=torch.float32) - cell_span[:, :2],
-            cell_span[:, 2:] - torch.tensor(limit[2:], dtype=torch.float32),
+            (torch.tensor(limit[:2], dtype=torch.float32) - cell_span[:, :2]) * cell_size,
+            (cell_span[:, 2:] - torch.tensor(limit[2:], dtype=torch.float32)) * cell_size,
         ], dim=-1))
-        return torch.mean(cell_span_excess ** 2)
+        return torch.mean(cell_span_excess)

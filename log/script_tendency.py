@@ -10,11 +10,13 @@ def tendency() -> Dict[str, Any]:
     train_dis_loss = [log['train_dis_loss'] for log in logs]
     train_overlap_loss = [log['train_overlap_loss'] for log in logs]
     train_hpwl_loss = [log['train_hpwl_loss'] / 10 for log in logs]
+    train_area_loss = [log['train_area_loss'] / 10 for log in logs]
     valid_loss = [log['valid_loss'] for log in logs]
     test_loss = [log['test_loss'] for log in logs]
     test_dis_loss = [log['test_dis_loss'] for log in logs]
     test_overlap_loss = [log['test_overlap_loss'] for log in logs]
     test_hpwl_loss = [log['test_hpwl_loss'] / 10 for log in logs]
+    test_area_loss = [log['test_area_loss'] / 10 for log in logs]
     best_idx = int(np.argmin(valid_loss))
 
     fig = plt.figure(figsize=(12, 10))
@@ -24,8 +26,10 @@ def tendency() -> Dict[str, Any]:
     plt.plot(epochs, test_dis_loss, color='red', label='Discrepancy Loss')
     plt.plot(epochs, train_overlap_loss, color='green', linestyle='--')
     plt.plot(epochs, test_overlap_loss, color='green', label='Overlap Loss')
-    plt.plot(epochs, train_hpwl_loss, color='blue', linestyle='--')
-    plt.plot(epochs, test_hpwl_loss, color='blue', label='HPWL Loss')
+    plt.plot(epochs, train_hpwl_loss, color='orange', linestyle='--')
+    plt.plot(epochs, test_hpwl_loss, color='orange', label='HPWL Loss')
+    plt.plot(epochs, train_area_loss, color='blue', linestyle='--')
+    plt.plot(epochs, test_area_loss, color='blue', label='Area Loss')
 
     plt.yscale('log')
     plt.legend()
@@ -35,7 +39,7 @@ def tendency() -> Dict[str, Any]:
 
 
 TUPLES = [
-    ('default', 'ours/default'),
+#     ('default', 'ours/default'),
     ('xpre', 'ours/xpre'),
 ]
 

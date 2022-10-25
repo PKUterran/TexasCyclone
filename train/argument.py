@@ -24,11 +24,11 @@ def parse_train_args() -> argparse.Namespace:
 
     # Model settings
     args_parser.add_argument(
-        '--gnn', type=str, default='place',
+        '--gnn', type=str, default='naive',
         help='GNN model'
     )
     args_parser.add_argument(
-        '--model', type=str, default='pre-default',
+        '--model', type=str, default='',
         help='name of reused model, empty if training a new model'
     )
     args_parser.add_argument(
@@ -82,11 +82,11 @@ def parse_train_args() -> argparse.Namespace:
         help='weight of overlap loss'
     )
     args_parser.add_argument(
-        '--area_lambda', type=float, default=1e-3,
+        '--area_lambda', type=float, default=1e0,
         help='weight of area loss'
     )
     args_parser.add_argument(
-        '--hpwl_lambda', type=float, default=1e-4,
+        '--hpwl_lambda', type=float, default=1e-2,
         help='weight of HPWL loss'
     )
     args_parser.add_argument(
@@ -121,7 +121,7 @@ def parse_pretrain_args() -> argparse.Namespace:
 
     # Model settings
     args_parser.add_argument(
-        '--gnn', type=str, default='place',
+        '--gnn', type=str, default='naive',
         help='GNN model'
     )
     args_parser.add_argument(
