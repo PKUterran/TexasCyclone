@@ -178,10 +178,7 @@ def train_ours(
             model.eval()
             ds = []
             print(f'\tEvaluate {dataset_name}:')
-            n_netlist = len(netlists)
-            iter_name_netlist = tqdm(zip(netlist_names, netlists), total=n_netlist) \
-                if use_tqdm else zip(netlist_names, netlists)
-            for netlist_name, netlist in iter_name_netlist:
+            for netlist_name, netlist in zip(netlist_names, netlists):
                 print(f'\tFor {netlist_name}:')
                 dict_netlist = expand_netlist(netlist)
                 iter_i_sub_netlist = tqdm(dict_netlist.items(), total=len(dict_netlist.items()), leave=False) \
