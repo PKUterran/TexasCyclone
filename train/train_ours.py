@@ -84,7 +84,7 @@ def train_ours(
 
     # Train model
     best_metric = 1e8  # lower is better
-    evaluate_cell_pos_dict = {}
+    evaluate_cell_pos_corner_dict = {}
     sample_overlap_loss_op = SampleOverlapLoss(span=4)
     macro_overlap_loss_op = MacroOverlapLoss(max_cap=50)
     area_loss_op = AreaLoss()
@@ -138,7 +138,7 @@ def train_ours(
                         sample_overlap_loss = sample_overlap_loss_op.forward(layout)
                         macro_overlap_loss = macro_overlap_loss_op.forward(layout)
                         overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
-                        area_loss = area_loss_op.forward(layout, limit=[0, 0, 5e4, 5e4])
+                        area_loss = area_loss_op.forward(layout, limit=[0, 0, *layout.netlist.layout_size])
                         hpwl_loss = hpwl_loss_op.forward(layout)
                         assert not torch.isnan(dis_loss), f"{dis_loss}"
                         assert not torch.isnan(hpwl_loss)
@@ -228,6 +228,7 @@ def train_ours(
                             edge_dis, edge_angle = \
                                 batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
                             layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist_, edge_dis, edge_angle)
+#                             print(nid_, layout.netlist.layout_size)
                             dni[nid_]['dis_loss'] = float(dis_loss.cpu().clone().detach().data)
                             sample_overlap_loss = sample_overlap_loss_op.forward(layout).cpu().clone().detach()
                             dni[nid_]['sample_overlap_loss'] = sample_overlap_loss.data
@@ -299,7 +300,7 @@ def train_ours(
                     f'{dataset_name}_loss': float(loss),
                 }
                 ds.append(d)
-                evaluate_cell_pos_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy()
+                evaluate_cell_pos_corner_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy()
                 del loss
                 torch.cuda.empty_cache()
 
@@ -325,10 +326,10 @@ def train_ours(
             if model_dir is not None:
                 print(f'\tSaving model to {model_dir}/{args.name}.pkl ...:')
                 torch.save(model.state_dict(), f'{model_dir}/{args.name}.pkl')
-        for dataset, cell_pos in evaluate_cell_pos_dict.items():
+        for dataset, cell_pos_corner in evaluate_cell_pos_corner_dict.items():
             print(f'\tSaving cell positions to {dataset}/output-{args.name}.npy ...:')
-            np.save(f'{dataset}/output-{args.name}.npy', cell_pos)
-        evaluate_cell_pos_dict.clear()
+            np.save(f'{dataset}/output-{args.name}.npy', cell_pos_corner)
+        evaluate_cell_pos_corner_dict.clear()
 
         print("\tinference time", time() - t2)
         logs[-1].update({'eval_time': time() - t2})
