@@ -171,5 +171,5 @@ def eval_ours(
     print("\teval time", time() - t2)
     log.update({'eval_time': time() - t2})
     if log_dir is not None:
-        with open(f'{log_dir}/{args.name}.json', 'w+') as fp:
+        with open(f'{log_dir}/eval-{args.name}.json', 'w+') as fp:
             json.dump(log, fp)
