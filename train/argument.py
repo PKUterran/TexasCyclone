@@ -46,7 +46,7 @@ def parse_train_args() -> argparse.Namespace:
 
     # Training settings
     args_parser.add_argument(
-        '--lr', type=float, default=1e-4,
+        '--lr', type=float, default=1e-5,
         help='learning rate'
     )
     args_parser.add_argument(
@@ -78,7 +78,7 @@ def parse_train_args() -> argparse.Namespace:
         help='weight of discrepancy loss'
     )
     args_parser.add_argument(
-        '--overlap_lambda', type=float, default=1e1,
+        '--overlap_lambda', type=float, default=1e0,
         help='weight of overlap loss'
     )
     args_parser.add_argument(
