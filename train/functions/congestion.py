@@ -3,7 +3,7 @@ import torch
 from typing import Tuple, List
 
 from data.graph import Layout
-from .LossFunction import LossFunction
+from .function import LossFunction
 
 
 def greedy_sample_net(net_central_pos: torch.Tensor, span) -> Tuple[List[int], List[int]]:
