@@ -34,14 +34,18 @@ def eval_dreamplace(
     # Calculate metric
     print(f'Calculating metric...')
     hpwl_metric_op = HPWLMetric(device)
-    rudy_metric_op = RUDYMetric()
+    rudy_metric_op = RUDYMetric(use_tqdm=use_tqdm)
     area_metric_op = AreaMetric()
     overlap_metric_op = OverlapMetric()
 
     def calc_metric(layout: Layout) -> Dict[str, float]:
+        print('\t\tcalculating HPWL...')
         hpwl_metric = hpwl_metric_op.calculate(layout)
+        print('\t\tcalculating RUDY...')
         rudy_metric = rudy_metric_op.calculate(layout)
+        print('\t\tcalculating Area...')
         area_metric = area_metric_op.calculate(layout, limit=[0, 0, *layout.netlist.layout_size])
+        print('\t\tcalculating Overlap...')
         overlap_metric = overlap_metric_op.calculate(layout)
         return {
             'hpwl_metric': hpwl_metric,
