@@ -19,7 +19,6 @@ class RUDYMetric(MetricFunction):
         for span, (degree,) in zip(net_span, net_degree):
             w1, w2 = map(int, span[[0, 2]] / self.w)
             h1, h2 = map(int, span[[0, 2]] / self.h)
-            print(w1, w2, h1, h2)
             density = degree / (w2 - w1 + 1) / (h2 - h1 + 1)
             for i in range(w1, min(w2 + 1, shape[0])):
                 for j in range(h1, min(h2 + 1, shape[1])):
