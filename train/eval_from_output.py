@@ -1,5 +1,4 @@
 import argparse
-
 import numpy as np
 import torch
 import json
@@ -61,7 +60,7 @@ def eval_from_output(
     def evaluate(netlists: List[Netlist], netlist_names: List[str], output_tokens: List[str], verbose=True):
         for netlist_name, netlist in zip(netlist_names, netlists):
             for token in output_tokens:
-                output_file = f'{eval_datasets}/output-{token}.npy'
+                output_file = f'{netlist_name}/output-{token}.npy'
                 if not os.path.exists(output_file):
                     print(f'\t{netlist_name} with {token} output not found.')
                     continue

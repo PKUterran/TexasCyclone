@@ -4,7 +4,8 @@ import json
 
 
 def generate_netlist(dataset: str, name: str, pin_net_cell: np.ndarray, cell_pos: np.ndarray,
-                     cell_data: np.ndarray, net_data: np.ndarray, pin_data: np.ndarray, cell_clusters=None):
+                     cell_data: np.ndarray, net_data: np.ndarray, pin_data: np.ndarray,
+                     cell_clusters=None, layout_size=None):
     directory = f'{dataset}/{name}'
     if not os.path.isdir(directory):
         os.mkdir(directory)
@@ -16,6 +17,9 @@ def generate_netlist(dataset: str, name: str, pin_net_cell: np.ndarray, cell_pos
     if cell_clusters is not None:
         with open(f'{directory}/cell_clusters.json', 'w+') as fp:
             json.dump(cell_clusters, fp)
+    if layout_size is not None:
+        with open(f'{directory}/layout_size.json', 'w+') as fp:
+            json.dump(layout_size, fp)
 
 
 if not os.path.isdir('dataset1'):
@@ -55,9 +59,9 @@ generate_netlist(
         [200, 200],
     ], dtype=np.float32),
     cell_data=np.array([
-        [50, 50, 2, 1],
-        [10, 10, 1, 0],
-        [10, 10, 1, 0],
+        [2, 50, 50, 1],
+        [1, 10, 10, 0],
+        [1, 10, 10, 0],
     ], dtype=np.float32),
     net_data=np.array([2, 2], dtype=np.float32),
     pin_data=np.array([
@@ -86,10 +90,10 @@ generate_netlist(
         [400, 0],
     ], dtype=np.float32),
     cell_data=np.array([
-        [50, 50, 2, 1],
-        [10, 10, 1, 0],
-        [10, 10, 2, 0],
-        [10, 10, 2, 0],
+        [2, 50, 50, 1],
+        [1, 10, 10, 0],
+        [2, 10, 10, 0],
+        [2, 10, 10, 0],
     ], dtype=np.float32),
     net_data=np.array([3, 2, 2], dtype=np.float32),
     pin_data=np.array([
@@ -101,5 +105,6 @@ generate_netlist(
         [50, 0, 0],
         [-5, 0, 1],
     ], dtype=np.float32),
-    cell_clusters=[[2, 3]]
+    cell_clusters=[[2, 3]],
+    layout_size=(450, 350)
 )
