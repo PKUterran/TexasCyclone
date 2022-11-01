@@ -37,7 +37,7 @@ def select_target_box(
 
 def refined_layout_pos(
         layout: Layout,
-        box_w=200, box_h=200, density_threshold=0.5, stride_per=0.1, momentum_per=0.2, sample_num=10, epochs=5,
+        box_w=200, box_h=200, density_threshold=0.2, stride_per=0.02, momentum_per=0.2, sample_num=10, epochs=10,
         seed=0, use_momentum=True, use_tqdm=False
 ) -> np.ndarray:
     state = np.random.get_state()
@@ -55,13 +55,13 @@ def refined_layout_pos(
     density_map = np.zeros(shape=shape, dtype=np.float32)
     box_size = box_w * box_h
 
-    print(f'\tInitializing density map...')
+    print(f'\t\tInitializing density map...')
     for mid in movable_set:
         w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
         if w >= shape[0] or h >= shape[1]:
             continue
         density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
-    print(f'\t\tMax density: {np.max(density_map)}')
+    print(f'\t\t\tMax density: {np.max(density_map)}:.3f')
 
     for tid in terminal_set:
         span = cell_span[tid, :]
@@ -75,7 +75,7 @@ def refined_layout_pos(
 
     cell_momentum = np.zeros_like(cell_pos)
     if use_momentum:
-        print(f'\tCalculating momentum...')
+        print(f'\t\tCalculating momentum...')
         dict_net_terminal_set = {}
         dict_movable_net_set = {}
         nets, cells = layout.netlist.graph.edges(etype='pinned')
@@ -96,7 +96,7 @@ def refined_layout_pos(
             delta_pos = t_pos - cell_pos[mid, :]
             cell_momentum[mid, :] = delta_pos / np.linalg.norm(delta_pos)
 
-    print(f'\tMoving cells...')
+    print(f'\t\tMoving cells...')
     stride_xy = (density_map.shape[0] * stride_per, density_map.shape[1] * stride_per)
     stride = np.sqrt(stride_xy[0] ** 2 + stride_xy[1] ** 2)
     for _ in range(epochs):
@@ -116,6 +116,9 @@ def refined_layout_pos(
             density_map[w, h] -= delta_density
             density_map[tw, th] += delta_density
 
+    print(f'\t\t\tMax density with terminals: {np.max(density_map):.3f}')
+    density_map[density_map > 0.99e5] = 0
+    print(f'\t\t\tMax density: {np.max(density_map):.3f}')
     np.random.set_state(state)
     return cell_pos
 
