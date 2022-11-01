@@ -55,6 +55,14 @@ def refined_layout_pos(
     density_map = np.zeros(shape=shape, dtype=np.float32)
     box_size = box_w * box_h
 
+    print(f'\tInitializing density map...')
+    for mid in movable_set:
+        w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
+        if w >= shape[0] or h >= shape[1]:
+            continue
+        density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
+    print(f'\t\tMax density: {np.max(density_map)}')
+
     for tid in terminal_set:
         span = cell_span[tid, :]
         w1, w2 = map(int, span[[0, 2]] / box_w)
@@ -63,25 +71,21 @@ def refined_layout_pos(
         h2 = min(h2 + 1, shape[1])
         if w2 <= w1 or h2 <= h1:
             continue
-        density_map[w1: w2, h1: h2] = 9.99
-
-    for mid in movable_set:
-        w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
-        if w >= shape[0] or h >= shape[1]:
-            continue
-        density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
+        density_map[w1: w2, h1: h2] = 1e5
 
     cell_momentum = np.zeros_like(cell_pos)
     if use_momentum:
+        print(f'\tCalculating momentum...')
         dict_net_terminal_set = {}
         dict_movable_net_set = {}
-        for net, cell in zip(*layout.netlist.graph.edges(etype='pinned')):
+        nets, cells = layout.netlist.graph.edges(etype='pinned')
+        iter_zip = tqdm(zip(nets, cells), total=layout.netlist.n_pin) if use_tqdm else zip(nets, cells)
+        for net, cell in iter_zip:
             net, cell = int(net), int(cell)
             if cell in terminal_set:
                 dict_net_terminal_set.setdefault(net, set()).add(cell)
             else:
                 dict_movable_net_set.setdefault(cell, set()).add(net)
-        print(f'\tCalculating momentum...')
         iter_dict = tqdm(dict_movable_net_set.items(), total=len(dict_movable_net_set)) \
             if use_tqdm else dict_movable_net_set.items()
         for mid, net_set in iter_dict:
