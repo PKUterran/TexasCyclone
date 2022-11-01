@@ -60,6 +60,7 @@ def eval_from_output(
 
     def evaluate(netlists: List[Netlist], netlist_names: List[str], output_tokens: List[str], verbose=True):
         for netlist_name, netlist in zip(netlist_names, netlists):
+            netlist._net_cell_indices_matrix = None
             for token in output_tokens:
                 output_file = f'{eval_datasets}/output-{token}.npy'
                 if not os.path.exists(output_file):
