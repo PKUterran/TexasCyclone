@@ -33,16 +33,6 @@ def netlist_from_numpy_directory(
         cells_pos_corner = np.load(f'{dir_name}/cell_pos.npy')
     else:
         cells_pos_corner = np.zeros(shape=[n_cell, 2], dtype=np.float)
-    if os.path.exists(f'{dir_name}/cell_clusters.json'):
-        with open(f'{dir_name}/cell_clusters.json') as fp:
-            cell_clusters = json.load(fp)
-    else:
-        cell_clusters = None
-    if os.path.exists(f'{dir_name}/layout_size.json'):
-        with open(f'{dir_name}/layout_size.json') as fp:
-            layout_size = json.load(fp)
-    else:
-        layout_size = None
     cells = list(pin_net_cell[:, 1])
     nets = list(pin_net_cell[:, 0])
     cells_size = torch.tensor(cell_data[:, [1, 2]], dtype=torch.float32)
@@ -54,6 +44,18 @@ def netlist_from_numpy_directory(
     nets_degree = torch.tensor(net_data, dtype=torch.float32).unsqueeze(-1)
     pins_pos = torch.tensor(pin_data[:, [0, 1]], dtype=torch.float32)
     pins_io = torch.tensor(pin_data[:, 2], dtype=torch.float32).unsqueeze(-1)
+
+    if os.path.exists(f'{dir_name}/cell_clusters.json'):
+        with open(f'{dir_name}/cell_clusters.json') as fp:
+            cell_clusters = json.load(fp)
+    else:
+        cell_clusters = None
+    if os.path.exists(f'{dir_name}/layout_size.json'):
+        with open(f'{dir_name}/layout_size.json') as fp:
+            layout_size = json.load(fp)
+    else:
+        cells_pos_up_corner = cells_ref_pos + cells_size / 2
+        layout_size = tuple(map(float, torch.max(cells_pos_up_corner[cells_type[:, 0] > 0.5], dim=0)[0]))
 
     graph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),

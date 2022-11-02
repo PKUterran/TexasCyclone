@@ -57,7 +57,6 @@ def eval_dreamplace(
     def evaluate(netlists: List[Netlist], netlist_names: List[str], verbose=True):
         for netlist_name, netlist in zip(netlist_names, netlists):
             print(f'\tFor {netlist_name}:')
-            netlist._net_cell_indices_matrix = None
             layout = layout_from_netlist_ref(netlist)
             metric_dict = calc_metric(layout)
             hpwl_metric = metric_dict['hpwl_metric']
