@@ -57,9 +57,12 @@ def refined_layout_pos(
 
     print(f'\t\tInitializing density map...')
     for mid in movable_set:
+        if cell_pos[mid, 0] > layout_size[0] - 1:
+            cell_pos[mid, 0] = layout_size[0] - 1
+        if cell_pos[mid, 1] > layout_size[1] - 1:
+            cell_pos[mid, 1] = layout_size[1] - 1
         w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
-        if w >= shape[0] or h >= shape[1]:
-            continue
+        assert w < shape[0] or h < shape[1]
         density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
     print(f'\t\t\tMax density: {np.max(density_map):.3f}')
 
