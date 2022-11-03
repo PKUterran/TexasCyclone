@@ -65,7 +65,7 @@ def eval_from_output(
                     print(f'\t{netlist_name} with {token} output not found.')
                     continue
                 print(f'\tFor {netlist_name} with {token} output:')
-                output_pos = torch.tensor(np.load(output_file), dtype=torch.float32)
+                output_pos = torch.tensor(np.load(output_file), dtype=torch.float32) + netlist.cell_prop_dict['size'] / 2
                 layout = layout_from_netlist_cell_pos(netlist, output_pos)
                 metric_dict = calc_metric(layout)
                 hpwl_metric = metric_dict['hpwl_metric']

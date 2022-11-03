@@ -64,7 +64,7 @@ DRAW_DIRECTORIES = [
 
 NAMES = [
 #     'default',
-    'xpre',
+    'refine-xpre',
 ]
 
 

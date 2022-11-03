@@ -31,7 +31,7 @@ def refine_output(
                 print(f'\t{netlist_name} with {token} output not found.')
                 continue
             print(f'\tFor {netlist_name} with {token} output:')
-            output_pos = torch.tensor(np.load(output_file), dtype=torch.float32)
+            output_pos = torch.tensor(np.load(output_file), dtype=torch.float32) + netlist.cell_prop_dict['size'] / 2
             layout = layout_from_netlist_cell_pos(netlist, output_pos)
             refine_pos = refined_layout_pos(layout, use_tqdm=use_tqdm)
-            np.save(refine_file, refine_pos)
+            np.save(refine_file, refine_pos - np.array(netlist.cell_prop_dict['size'].cpu().detach(), dtype=np.float32) / 2)

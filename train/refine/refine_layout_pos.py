@@ -37,7 +37,7 @@ def select_target_box(
 
 def refined_layout_pos(
         layout: Layout,
-        box_w=200, box_h=200, density_threshold=0.2, stride_per=0.02, momentum_per=0.2, sample_num=10, epochs=10,
+        box_w=200, box_h=200, density_threshold=1.0, stride_per=0.05, momentum_per=0.0, sample_num=10, epochs=5,
         seed=0, use_momentum=True, use_tqdm=False
 ) -> np.ndarray:
     state = np.random.get_state()
@@ -61,7 +61,7 @@ def refined_layout_pos(
         if w >= shape[0] or h >= shape[1]:
             continue
         density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
-    print(f'\t\t\tMax density: {np.max(density_map)}:.3f')
+    print(f'\t\t\tMax density: {np.max(density_map):.3f}')
 
     for tid in terminal_set:
         span = cell_span[tid, :]
@@ -71,7 +71,7 @@ def refined_layout_pos(
         h2 = min(h2 + 1, shape[1])
         if w2 <= w1 or h2 <= h1:
             continue
-        density_map[w1: w2, h1: h2] = 1e5
+        density_map[w1: w2, h1: h2] += 1e5
 
     cell_momentum = np.zeros_like(cell_pos)
     if use_momentum:
@@ -94,7 +94,7 @@ def refined_layout_pos(
                 continue
             t_pos = np.mean(cell_pos[list(mts), :], axis=0)
             delta_pos = t_pos - cell_pos[mid, :]
-            cell_momentum[mid, :] = delta_pos / np.linalg.norm(delta_pos)
+            cell_momentum[mid, :] = delta_pos / (np.linalg.norm(delta_pos) + 1e-3)
 
     print(f'\t\tMoving cells...')
     stride_xy = (density_map.shape[0] * stride_per, density_map.shape[1] * stride_per)
