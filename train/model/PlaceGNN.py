@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Any, Dict, List, Tuple
-from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv, GATConv
+from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv, GATConv, SAGEConv
 import dgl
 import os, sys
 
@@ -112,10 +112,12 @@ class HeteroGraphConvLayers(nn.Module):
                     HyperEdgeConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                                   hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats,
                                   num_heads=num_heads),
-                'pinned':  # GraphConv(in_feats=self.hidden_net_feats, out_feats=self.hidden_cell_feats),
-                    CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
-                           hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+                'pinned':  SAGEConv(in_feats=(self.hidden_net_feats,self.hidden_cell_feats),aggregator_type='mean',out_feats=self.hidden_cell_feats),
+                # GraphConv(in_feats=self.hidden_net_feats, out_feats=self.hidden_cell_feats),
+                    # CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
+                    #        hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
             }, aggregate='max') for _ in range(num_layers)]).to(device)
+        self.edge_weight_lin = nn.Linear(self.hidden_pin_feats,1)
 
         self.device = device
         self.to(self.device)
@@ -127,13 +129,18 @@ class HeteroGraphConvLayers(nn.Module):
             hidden_net_feat: torch.Tensor,
             hidden_pin_feat: torch.Tensor
     ) -> Dict[str, torch.Tensor]:
+        edge_weight = torch.tanh(self.edge_weight_lin(hidden_pin_feat))
 
         for hetero_conv_layer in self.hetero_graph_conv_layers:
             h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
-            h = hetero_conv_layer.forward(graph.edge_type_subgraph(['pins', 'pinned']), h,
-                                          mod_kwargs={'pins': {'edge_feats': hidden_pin_feat},
-                                                      'pinned': {'edge_feats': hidden_pin_feat}})
-            hidden_cell_feat, hidden_net_feat = h['cell'], h['net']
+            h = hetero_conv_layer.forward(graph.edge_type_subgraph(['pins']), h,
+                                          mod_kwargs={'pins': {'edge_feats': hidden_pin_feat}})
+            hidden_net_feat = h['net']
+            h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
+            h = hetero_conv_layer.forward(graph.edge_type_subgraph(['pinned']), h,
+                                          mod_kwargs={'pinned': {'edge_weight': edge_weight}})
+            # hidden_cell_feat, hidden_net_feat = h['cell'], h['net']
+            hidden_cell_feat = h['cell']
 
         return {'cell': hidden_cell_feat, 'net': hidden_net_feat}
 

@@ -55,8 +55,7 @@ def train_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
-        'NUM_LAYERS': 3,
-        'NUM_HEADS': 8,
+        'PASS_TYPE': args.pass_type,
     }
 
     if args.gnn == 'naive':
@@ -87,9 +86,9 @@ def train_ours(
     # Train model
     best_metric = 1e8  # lower is better
     evaluate_cell_pos_corner_dict = {}
-    sample_overlap_loss_op = SampleOverlapLoss(span=4)
+    # sample_overlap_loss_op = SampleOverlapLoss(span=4)
     macro_overlap_loss_op = MacroOverlapLoss(max_cap=50)
-    area_loss_op = AreaLoss(device)
+    area_loss_op = AreaLoss()
     hpwl_loss_op = HPWLLoss(device)
     cong_loss_op = SampleNetOverlapLoss(device, span=4)
 
@@ -114,6 +113,7 @@ def train_ours(
             batch_net_feature = []
             batch_pin_feature = []
             sub_netlist_feature_idrange = []
+            batch_cell_size = []
 
             for j, netlist in iter_i_netlist:
                 batch_netlist.append(netlist)
@@ -125,33 +125,35 @@ def train_ours(
                 batch_cell_feature.append(netlist.cell_prop_dict['feat'])
                 batch_net_feature.append(netlist.net_prop_dict['feat'])
                 batch_pin_feature.append(netlist.pin_prop_dict['feat'])
+                batch_cell_size.append(netlist.cell_prop_dict['size'])
                 if total_batch_nodes_num > 10000 or j == n_netlist - 1:
                     batch_cell_feature = torch.vstack(batch_cell_feature)
                     batch_net_feature = torch.vstack(batch_net_feature)
                     batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
+                    batch_cell_size = torch.vstack(batch_cell_size)
                     batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature))
+                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
                     # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
                     for nid, sub_netlist in enumerate(batch_netlist):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
                         edge_dis, edge_angle = batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
                         layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist, edge_dis, edge_angle)
-                        sample_overlap_loss = sample_overlap_loss_op.forward(layout)
+                        # sample_overlap_loss = sample_overlap_loss_op.forward(layout)
                         macro_overlap_loss = macro_overlap_loss_op.forward(layout)
-                        overlap_loss = sample_overlap_loss + macro_overlap_loss * 10
+                        overlap_loss = macro_overlap_loss * 10
                         area_loss = area_loss_op.forward(layout, limit=[0, 0, *layout.netlist.layout_size])
                         hpwl_loss = hpwl_loss_op.forward(layout)
                         assert not torch.isnan(dis_loss), f"{dis_loss}"
                         assert not torch.isnan(hpwl_loss)
                         assert not torch.isnan(area_loss)
                         assert not torch.isnan(macro_overlap_loss)
-                        assert not torch.isnan(sample_overlap_loss)
+                        # assert not torch.isnan(sample_overlap_loss)
                         assert not torch.isinf(dis_loss), f"{dis_loss}"
                         assert not torch.isinf(hpwl_loss)
                         assert not torch.isinf(area_loss)
                         assert not torch.isinf(macro_overlap_loss)
-                        assert not torch.isinf(sample_overlap_loss)
+                        # assert not torch.isinf(sample_overlap_loss)
                         loss = sum((
                             args.dis_lambda * dis_loss,
                             args.overlap_lambda * overlap_loss,
@@ -172,6 +174,7 @@ def train_ours(
                     batch_cell_feature = []
                     batch_net_feature = []
                     batch_pin_feature = []
+                    batch_cell_size = []
                     torch.cuda.empty_cache()
             print(f"\tTraining time per epoch: {time() - t1}")
 
@@ -197,6 +200,9 @@ def train_ours(
                 batch_net_feature = []
                 batch_pin_feature = []
                 sub_netlist_feature_idrange = []
+                batch_cell_size = []
+                total_dis = []
+                total_angle = []
                 cnt = 0
 
                 for nid, sub_netlist in iter_i_sub_netlist:
@@ -210,10 +216,12 @@ def train_ours(
                     batch_cell_feature.append(sub_netlist.cell_prop_dict['feat'])
                     batch_net_feature.append(sub_netlist.net_prop_dict['feat'])
                     batch_pin_feature.append(sub_netlist.pin_prop_dict['feat'])
+                    batch_cell_size.append(sub_netlist.cell_prop_dict['size'])
                     if total_batch_nodes_num > 10000 or cnt == total_len - 1:
                         batch_cell_feature = torch.vstack(batch_cell_feature)
                         batch_net_feature = torch.vstack(batch_net_feature)
                         batch_pin_feature = torch.vstack(batch_pin_feature)
+                        batch_cell_size = torch.vstack(batch_cell_size)
                         batch_graph = []
                         for nid_ in batch_netlist_id:
                             netlist = dict_netlist[nid_]
@@ -221,8 +229,10 @@ def train_ours(
                         # batch_graph = dgl.batch([sub_netlist.graph for _,sub_netlist in batch_netlist_id])
                         batch_graph = dgl.batch(batch_graph)
                         batch_edge_dis, batch_edge_angle = model.forward(
-                            batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature))
+                            batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
                         # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                        total_dis.append(batch_edge_dis.unsqueeze(1))
+                        total_angle.append(batch_edge_angle.unsqueeze(1))
                         for j, nid_ in enumerate(batch_netlist_id):
                             sub_netlist_ = dict_netlist[nid_]
                             begin_idx, end_idx = sub_netlist_feature_idrange[j]
@@ -231,12 +241,11 @@ def train_ours(
                             layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist_, edge_dis, edge_angle)
 #                             print(nid_, layout.netlist.layout_size)
                             dni[nid_]['dis_loss'] = float(dis_loss.cpu().clone().detach().data)
-                            sample_overlap_loss = sample_overlap_loss_op.forward(layout).cpu().clone().detach()
-                            dni[nid_]['sample_overlap_loss'] = sample_overlap_loss.data
+                            # sample_overlap_loss = sample_overlap_loss_op.forward(layout).cpu().clone().detach()
+                            # dni[nid_]['sample_overlap_loss'] = sample_overlap_loss.data
                             macro_overlap_loss = macro_overlap_loss_op.forward(layout).cpu().clone().detach()
                             dni[nid_]['macro_overlap_loss'] = float(macro_overlap_loss.data)
-                            dni[nid_]['overlap_loss'] = dni[nid_]['sample_overlap_loss'] + dni[nid_][
-                                'macro_overlap_loss'] * 10
+                            dni[nid_]['overlap_loss'] = dni[nid_]['macro_overlap_loss'] * 10
                             area_loss = area_loss_op.forward(
                                 layout, limit=[0, 0, *layout.netlist.layout_size]).cpu().clone().detach()
                             dni[nid_]['area_loss'] = float(area_loss.data)
@@ -250,13 +259,13 @@ def train_ours(
                             assert not torch.isnan(hpwl_loss)
                             assert not torch.isnan(area_loss)
                             assert not torch.isnan(macro_overlap_loss)
-                            assert not torch.isnan(sample_overlap_loss)
+                            # assert not torch.isnan(sample_overlap_loss)
                             assert not torch.isinf(dis_loss)
                             # assert not torch.isinf(cong_loss)
                             assert not torch.isinf(hpwl_loss)
                             assert not torch.isinf(area_loss)
                             assert not torch.isinf(macro_overlap_loss)
-                            assert not torch.isinf(sample_overlap_loss)
+                            # assert not torch.isinf(sample_overlap_loss)
                         batch_netlist_id = []
                         sub_netlist_feature_idrange = []
                         total_batch_nodes_num = 0
@@ -264,12 +273,13 @@ def train_ours(
                         batch_cell_feature = []
                         batch_net_feature = []
                         batch_pin_feature = []
+                        batch_cell_size = []
                     cnt += 1
                     torch.cuda.empty_cache()
                 layout = assemble_layout_with_netlist_info(dni, dict_netlist, device=device)
                 # layout = assemble_layout({nid: nif['layout'] for nid, nif in dni.items()}, device=torch.device("cpu"))
                 dis_loss = sum(v['dis_loss'] for v in dni.values()) / len(dni)
-                sample_overlap_loss = sum(v['sample_overlap_loss'] for v in dni.values()) / len(dni)
+                # sample_overlap_loss = sum(v['sample_overlap_loss'] for v in dni.values()) / len(dni)
                 macro_overlap_loss = sum(v['macro_overlap_loss'] for v in dni.values()) / len(dni)
                 overlap_loss = sum(v['overlap_loss'] for v in dni.values()) / len(dni)
                 area_loss = sum(v['area_loss'] for v in dni.values()) / len(dni)
@@ -283,7 +293,7 @@ def train_ours(
                     # args.cong_lambda * cong_loss,
                 ))
                 print(f'\t\tDiscrepancy Loss: {dis_loss}')
-                print(f'\t\tSample Overlap Loss: {sample_overlap_loss}')
+                # print(f'\t\tSample Overlap Loss: {sample_overlap_loss}')
                 print(f'\t\tMacro Overlap Loss: {macro_overlap_loss}')
                 print(f'\t\tTotal Overlap Loss: {overlap_loss}')
                 print(f'\t\tArea Loss: {area_loss}')
@@ -292,7 +302,7 @@ def train_ours(
                 print(f'\t\tTotal Loss: {loss}')
                 d = {
                     f'{dataset_name}_dis_loss': float(dis_loss),
-                    f'{dataset_name}_sample_overlap_loss': float(sample_overlap_loss),
+                    # f'{dataset_name}_sample_overlap_loss': float(sample_overlap_loss),
                     f'{dataset_name}_macro_overlap_loss': float(macro_overlap_loss),
                     f'{dataset_name}_overlap_loss': float(overlap_loss),
                     f'{dataset_name}_area_loss': float(area_loss),
@@ -301,7 +311,7 @@ def train_ours(
                     f'{dataset_name}_loss': float(loss),
                 }
                 ds.append(d)
-                evaluate_cell_pos_corner_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy()
+                evaluate_cell_pos_corner_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy() / 2
                 del loss
                 torch.cuda.empty_cache()
 

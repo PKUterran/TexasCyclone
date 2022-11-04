@@ -43,6 +43,10 @@ def parse_train_args() -> argparse.Namespace:
         '--pin_feats', type=int, default=8,
         help='hidden dim of pin features'
     )
+    args_parser.add_argument(
+        '--pass_type', type=str, default='single',
+        help='hidden dim of pin features'
+    )
 
     # Training settings
     args_parser.add_argument(
@@ -138,6 +142,10 @@ def parse_pretrain_args() -> argparse.Namespace:
     )
     args_parser.add_argument(
         '--pin_feats', type=int, default=8,
+        help='hidden dim of pin features'
+    )
+    args_parser.add_argument(
+        '--pass_type', type=str, default='single',
         help='hidden dim of pin features'
     )
 

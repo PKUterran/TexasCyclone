@@ -54,13 +54,14 @@ class Netlist:
             self.adapt_terminals()
             assert len(self.terminal_indices) > 0
 
+        self._net_cell_indices_matrix = None
+
         if simple:
             return
         self._cell_flow = None
         self._cell_path_edge_matrix = None
         self._path_cell_matrix = None
         self._path_edge_matrix = None
-        self._net_cell_indices_matrix = None
         self.terminal_edge_pos = self.cell_prop_dict['pos'][self.terminal_indices, :]
         self.n_edge = len(self.cell_flow.flow_edge_indices)
         fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
