@@ -9,3 +9,11 @@ class LossFunction(nn.Module):
 
     def forward(self, layout: Layout, *args, **kwargs):
         raise NotImplementedError
+
+
+class MetricFunction:
+    def __init__(self):
+        pass
+
+    def calculate(self, layout: Layout, *args, **kwargs):
+        raise NotImplementedError

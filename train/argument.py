@@ -50,7 +50,7 @@ def parse_train_args() -> argparse.Namespace:
 
     # Training settings
     args_parser.add_argument(
-        '--lr', type=float, default=1e-4,
+        '--lr', type=float, default=1e-5,
         help='learning rate'
     )
     args_parser.add_argument(

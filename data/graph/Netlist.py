@@ -53,6 +53,8 @@ class Netlist:
         if len(self.terminal_indices) == 0:
             self.adapt_terminals()
             assert len(self.terminal_indices) > 0
+            
+        self._net_cell_indices_matrix = None
 
         self._net_cell_indices_matrix = None
 

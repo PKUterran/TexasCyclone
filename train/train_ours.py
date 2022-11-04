@@ -1,10 +1,11 @@
 import argparse
-from copy import copy
 import numpy as np
 import torch
 import json
+import dgl
 from typing import List, Dict, Any
 from functools import reduce
+from copy import copy
 from time import time
 from tqdm import tqdm
 
@@ -13,7 +14,7 @@ from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN, PlaceGNN
 from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, MacroOverlapLoss, SampleNetOverlapLoss
-import dgl
+from train.functions import HPWLMetric, RUDYMetric, AreaMetric, OverlapMetric
 
 
 def train_ours(
@@ -92,10 +93,53 @@ def train_ours(
     hpwl_loss_op = HPWLLoss(device)
     cong_loss_op = SampleNetOverlapLoss(device, span=4)
 
+    hpwl_metric_op = HPWLMetric(device)
+    rudy_metric_op = RUDYMetric()
+    area_metric_op = AreaMetric()
+    overlap_metric_op = OverlapMetric()
+
     for epoch in range(0, args.epochs + 1):
         print(f'##### EPOCH {epoch} #####')
         print(f'\tLearning rate: {optimizer.state_dict()["param_groups"][0]["lr"]}')
         logs.append({'epoch': epoch})
+
+        def calc_loss(layout: Layout) -> Dict[str, torch.Tensor]:
+            # sample_overlap_loss = sample_overlap_loss_op.forward(layout)
+            macro_overlap_loss = macro_overlap_loss_op.forward(layout)
+            overlap_loss = macro_overlap_loss * 10
+            area_loss = area_loss_op.forward(layout, limit=[0, 0, *layout.netlist.layout_size])
+            hpwl_loss = hpwl_loss_op.forward(layout)
+            # cong_loss = cong_loss_op.forward(layout)
+            # assert not torch.isnan(cong_loss)
+            assert not torch.isnan(hpwl_loss)
+            assert not torch.isnan(area_loss)
+            assert not torch.isnan(macro_overlap_loss)
+            # assert not torch.isnan(sample_overlap_loss)
+            # assert not torch.isinf(cong_loss)
+            assert not torch.isinf(hpwl_loss)
+            assert not torch.isinf(area_loss)
+            assert not torch.isinf(macro_overlap_loss)
+            # assert not torch.isinf(sample_overlap_loss)
+            return {
+                # 'sample_overlap_loss': sample_overlap_loss,
+                'macro_overlap_loss': macro_overlap_loss,
+                'overlap_loss': overlap_loss,
+                'area_loss': area_loss,
+                'hpwl_loss': hpwl_loss,
+                # 'cong_loss': cong_loss,
+            }
+
+        def calc_metric(layout: Layout) -> Dict[str, float]:
+            hpwl_metric = hpwl_metric_op.calculate(layout)
+            rudy_metric = rudy_metric_op.calculate(layout)
+            area_metric = area_metric_op.calculate(layout, limit=[0, 0, *layout.netlist.layout_size])
+            overlap_metric = overlap_metric_op.calculate(layout)
+            return {
+                'hpwl_metric': hpwl_metric,
+                'rudy_metric': rudy_metric,
+                'area_metric': area_metric,
+                'overlap_metric': overlap_metric,
+            }
 
         def train(netlists: List[Netlist]):
             model.train()
@@ -139,30 +183,17 @@ def train_ours(
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
                         edge_dis, edge_angle = batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
                         layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist, edge_dis, edge_angle)
-                        # sample_overlap_loss = sample_overlap_loss_op.forward(layout)
-                        macro_overlap_loss = macro_overlap_loss_op.forward(layout)
-                        overlap_loss = macro_overlap_loss * 10
-                        area_loss = area_loss_op.forward(layout, limit=[0, 0, *layout.netlist.layout_size])
-                        hpwl_loss = hpwl_loss_op.forward(layout)
                         assert not torch.isnan(dis_loss), f"{dis_loss}"
-                        assert not torch.isnan(hpwl_loss)
-                        assert not torch.isnan(area_loss)
-                        assert not torch.isnan(macro_overlap_loss)
-                        # assert not torch.isnan(sample_overlap_loss)
                         assert not torch.isinf(dis_loss), f"{dis_loss}"
-                        assert not torch.isinf(hpwl_loss)
-                        assert not torch.isinf(area_loss)
-                        assert not torch.isinf(macro_overlap_loss)
-                        # assert not torch.isinf(sample_overlap_loss)
+                        loss_dict = calc_loss(layout)
                         loss = sum((
                             args.dis_lambda * dis_loss,
-                            args.overlap_lambda * overlap_loss,
-                            args.area_lambda * area_loss,
-                            args.hpwl_lambda * hpwl_loss,
-                            # args.cong_lambda * cong_loss,
+                            args.overlap_lambda * loss_dict['overlap_loss'],
+                            args.area_lambda * loss_dict['area_loss'],
+                            args.hpwl_lambda * loss_dict['hpwl_loss'],
+                            # args.cong_lambda * loss_dict['cong_loss'],
                         ))
                         losses.append(loss)
-                        # if len(losses) >= args.batch:
                     (sum(losses) / len(losses)).backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=20, norm_type=2)
                     optimizer.step()
@@ -182,10 +213,7 @@ def train_ours(
             model.eval()
             ds = []
             print(f'\tEvaluate {dataset_name}:')
-            n_netlist = len(netlists)
-            iter_name_netlist = tqdm(zip(netlist_names, netlists), total=n_netlist) \
-                if use_tqdm else zip(netlist_names, netlists)
-            for netlist_name, netlist in iter_name_netlist:
+            for netlist_name, netlist in zip(netlist_names, netlists):
                 print(f'\tFor {netlist_name}:')
                 dict_netlist = expand_netlist(netlist)
                 iter_i_sub_netlist = tqdm(dict_netlist.items(), total=len(dict_netlist.items()), leave=False) \
@@ -239,33 +267,18 @@ def train_ours(
                             edge_dis, edge_angle = \
                                 batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
                             layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist_, edge_dis, edge_angle)
-#                             print(nid_, layout.netlist.layout_size)
-                            dni[nid_]['dis_loss'] = float(dis_loss.cpu().clone().detach().data)
-                            # sample_overlap_loss = sample_overlap_loss_op.forward(layout).cpu().clone().detach()
-                            # dni[nid_]['sample_overlap_loss'] = sample_overlap_loss.data
-                            macro_overlap_loss = macro_overlap_loss_op.forward(layout).cpu().clone().detach()
-                            dni[nid_]['macro_overlap_loss'] = float(macro_overlap_loss.data)
-                            dni[nid_]['overlap_loss'] = dni[nid_]['macro_overlap_loss'] * 10
-                            area_loss = area_loss_op.forward(
-                                layout, limit=[0, 0, *layout.netlist.layout_size]).cpu().clone().detach()
-                            dni[nid_]['area_loss'] = float(area_loss.data)
-                            hpwl_loss = hpwl_loss_op.forward(layout).cpu().clone().detach()
-                            dni[nid_]['hpwl_loss'] = hpwl_loss.data
-                            # cong_loss = cong_loss_op.forward(layout).cpu().clone().detach()
-                            # dni[nid_]['cong_loss'] = float(cong_loss.data)
-                            dni[nid_]['cell_pos'] = copy(layout.cell_pos)
                             assert not torch.isnan(dis_loss)
-                            # assert not torch.isnan(cong_loss)
-                            assert not torch.isnan(hpwl_loss)
-                            assert not torch.isnan(area_loss)
-                            assert not torch.isnan(macro_overlap_loss)
-                            # assert not torch.isnan(sample_overlap_loss)
                             assert not torch.isinf(dis_loss)
-                            # assert not torch.isinf(cong_loss)
-                            assert not torch.isinf(hpwl_loss)
-                            assert not torch.isinf(area_loss)
-                            assert not torch.isinf(macro_overlap_loss)
-                            # assert not torch.isinf(sample_overlap_loss)
+                            loss_dict = calc_loss(layout)
+                            loss_dict = {k: float(v.cpu().clone().detach().data) for k, v in loss_dict.items()}
+                            dni[nid_]['dis_loss'] = float(dis_loss.cpu().clone().detach().data)
+                            # dni[nid_]['sample_overlap_loss'] = loss_dict['sample_overlap_loss']
+                            dni[nid_]['macro_overlap_loss'] = loss_dict['macro_overlap_loss']
+                            dni[nid_]['overlap_loss'] = loss_dict['overlap_loss']
+                            dni[nid_]['area_loss'] = loss_dict['area_loss']
+                            dni[nid_]['hpwl_loss'] = loss_dict['hpwl_loss']
+                            # dni[nid_]['cong_loss'] = loss_dict['cong_loss']
+                            dni[nid_]['cell_pos'] = copy(layout.cell_pos)
                         batch_netlist_id = []
                         sub_netlist_feature_idrange = []
                         total_batch_nodes_num = 0
@@ -292,6 +305,11 @@ def train_ours(
                     args.hpwl_lambda * hpwl_loss,
                     # args.cong_lambda * cong_loss,
                 ))
+                metric_dict = calc_metric(layout)
+                hpwl_metric = metric_dict['hpwl_metric']
+                rudy_metric = metric_dict['rudy_metric']
+                area_metric = metric_dict['area_metric']
+                overlap_metric = metric_dict['overlap_metric']
                 print(f'\t\tDiscrepancy Loss: {dis_loss}')
                 # print(f'\t\tSample Overlap Loss: {sample_overlap_loss}')
                 print(f'\t\tMacro Overlap Loss: {macro_overlap_loss}')
@@ -300,6 +318,10 @@ def train_ours(
                 print(f'\t\tHPWL Loss: {hpwl_loss}')
                 # print(f'\t\tCongestion Loss: {cong_loss}')
                 print(f'\t\tTotal Loss: {loss}')
+                print(f'\t\tHPWL Metric: {hpwl_metric}')
+                print(f'\t\tRUDY Metric: {rudy_metric}')
+                print(f'\t\tArea Metric: {area_metric}')
+                print(f'\t\tOverlap Metric: {overlap_metric}')
                 d = {
                     f'{dataset_name}_dis_loss': float(dis_loss),
                     # f'{dataset_name}_sample_overlap_loss': float(sample_overlap_loss),
@@ -309,9 +331,14 @@ def train_ours(
                     f'{dataset_name}_hpwl_loss': float(hpwl_loss),
                     # f'{dataset_name}_cong_loss': float(cong_loss),
                     f'{dataset_name}_loss': float(loss),
+                    f'{netlist_name}_hpwl_metric': float(hpwl_metric),
+                    f'{netlist_name}_rudy_metric': float(rudy_metric),
+                    f'{netlist_name}_area_metric': float(area_metric),
+                    f'{netlist_name}_overlap_metric': float(overlap_metric),
                 }
                 ds.append(d)
-                evaluate_cell_pos_corner_dict[netlist_name] = layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy() / 2
+                evaluate_cell_pos_corner_dict[netlist_name] = \
+                    layout.cell_pos.cpu().detach().numpy() - layout.cell_size.cpu().detach().numpy() / 2
                 del loss
                 torch.cuda.empty_cache()
 
