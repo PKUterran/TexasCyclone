@@ -46,6 +46,7 @@ def eval_ours(
         'CELL_FEATS': args.cell_feats,
         'NET_FEATS': args.net_feats,
         'PIN_FEATS': args.pin_feats,
+        'PASS_TYPE': args.pass_type,
     }
 
     if args.gnn == 'naive':
@@ -108,6 +109,7 @@ def eval_ours(
             batch_net_feature = []
             batch_pin_feature = []
             sub_netlist_feature_idrange = []
+            batch_cell_size = []
             cnt = 0
 
             for nid, sub_netlist in iter_i_sub_netlist:
@@ -121,10 +123,12 @@ def eval_ours(
                 batch_cell_feature.append(sub_netlist.cell_prop_dict['feat'])
                 batch_net_feature.append(sub_netlist.net_prop_dict['feat'])
                 batch_pin_feature.append(sub_netlist.pin_prop_dict['feat'])
+                batch_cell_size.append(sub_netlist.cell_prop_dict['size'])
                 if total_batch_nodes_num > 10000 or cnt == total_len - 1:
                     batch_cell_feature = torch.vstack(batch_cell_feature)
                     batch_net_feature = torch.vstack(batch_net_feature)
                     batch_pin_feature = torch.vstack(batch_pin_feature)
+                    batch_cell_size = torch.vstack(batch_cell_size)
                     batch_graph = []
                     for nid_ in batch_netlist_id:
                         netlist = dict_netlist[nid_]
@@ -132,7 +136,7 @@ def eval_ours(
                     # batch_graph = dgl.batch([sub_netlist.graph for _,sub_netlist in batch_netlist_id])
                     batch_graph = dgl.batch(batch_graph)
                     batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature))
+                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
                     # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
                     for j, nid_ in enumerate(batch_netlist_id):
                         sub_netlist_ = dict_netlist[nid_]
@@ -148,6 +152,7 @@ def eval_ours(
                     batch_cell_feature = []
                     batch_net_feature = []
                     batch_pin_feature = []
+                    batch_cell_size = []
                 cnt += 1
                 torch.cuda.empty_cache()
             layout = assemble_layout_with_netlist_info(dni, dict_netlist, device=device)
