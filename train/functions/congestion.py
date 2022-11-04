@@ -40,15 +40,15 @@ class SampleNetOverlapLoss(LossFunction):
 
     def forward(self, layout: Layout, *args, **kwargs) -> torch.Tensor:
         net_span = layout.net_span
-        net_central_pos = net_span @ self.span2pos_matrix
-        net_size = net_span @ self.span2size_matrix
+        net_central_pos = net_span @ self.span2pos_matrix.to(net_span.device)
+        net_size = net_span @ self.span2size_matrix.to(net_span.device)
         sample_i, sample_j = greedy_sample_net(net_central_pos, self.span)
         if len(sample_i) == 0:
             return torch.tensor(0.)
-        sample_net_size_i = net_size[sample_i, :]
-        sample_net_size_j = net_size[sample_j, :]
-        sample_net_pos_i = net_central_pos[sample_i, :]
-        sample_net_pos_j = net_central_pos[sample_j, :]
+        sample_net_size_i = net_size[sample_i, :].to(net_span.device)
+        sample_net_size_j = net_size[sample_j, :].to(net_span.device)
+        sample_net_pos_i = net_central_pos[sample_i, :].to(net_span.device)
+        sample_net_pos_j = net_central_pos[sample_j, :].to(net_span.device)
         overlap_x = torch.relu((sample_net_size_i[:, 0] + sample_net_size_j[:, 0]) / 2 -
                                torch.abs(sample_net_pos_i[:, 0] - sample_net_pos_j[:, 0]))
         overlap_y = torch.relu((sample_net_size_i[:, 1] + sample_net_size_j[:, 1]) / 2 -

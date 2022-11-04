@@ -119,10 +119,10 @@ def layout_from_netlist_dis_angle(
 ) -> Tuple[Layout, torch.Tensor]:
     movable_edge_pos = torch.stack([movable_edge_dis * torch.cos(movable_edge_angle * np.pi),
                                     movable_edge_dis * torch.sin(movable_edge_angle * np.pi)]).t()
-    edge_pos = torch.vstack([netlist.terminal_edge_pos, movable_edge_pos])
-    cell_pos = netlist.cell_path_edge_matrix @ edge_pos
-    path_pos = netlist.path_edge_matrix @ edge_pos
-    path_pos_discrepancy = path_pos - netlist.path_cell_matrix @ cell_pos
+    edge_pos = torch.vstack([netlist.terminal_edge_pos.to(movable_edge_pos.device), movable_edge_pos])
+    cell_pos = netlist.cell_path_edge_matrix.to(edge_pos.device) @ edge_pos
+    path_pos = netlist.path_edge_matrix.to(edge_pos.device) @ edge_pos
+    path_pos_discrepancy = path_pos - netlist.path_cell_matrix.to(cell_pos.device) @ cell_pos
     return Layout(netlist, cell_pos), torch.mean(torch.norm(path_pos_discrepancy, dim=1))
 
 
