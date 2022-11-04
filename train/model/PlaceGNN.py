@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv, GATConv, SAGEConv
 import dgl
 import os, sys
+import numpy as np
 
 sys.path.append(os.path.abspath('.'))
 # from data.Netlist import netlist_from_numpy_directory
@@ -51,7 +52,8 @@ class PlaceGNN(nn.Module):
     def forward(
             self,
             graph: dgl.DGLHeteroGraph,
-            feature: Tuple[torch.tensor, torch.tensor, torch.tensor]
+            feature: Tuple[torch.tensor, torch.tensor, torch.tensor],
+            cell_size : torch.tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         cell_feat, net_feat, pin_feat = feature
         cell_feat = cell_feat.to(self.device)
@@ -74,8 +76,13 @@ class PlaceGNN(nn.Module):
             hidden_cell_feat[fathers, :],
             hidden_cell_feat[sons, :]
         ], dim=-1)
-        edge_dis = torch.exp(12 * torch.tanh(self.edge_dis_readout(hidden_cell_pair_feat))).view(-1)
+        edge_dis_ = torch.exp(-2+15 * torch.tanh(self.edge_dis_readout(hidden_cell_pair_feat))).view(-1)
         edge_angle = torch.tanh(self.edge_angle_readout(hidden_cell_pair_feat)).view(-1) * 4
+        cell_size = cell_size.to(self.device)
+        bound_size = (cell_size[fathers] + cell_size[sons]).to(self.device) / 2
+        eps = torch.ones_like(edge_angle).to(self.device) * 1e-4
+        tmp = torch.min(torch.abs(bound_size[:,0] / (torch.cos(edge_angle*np.pi)+eps)),torch.abs(bound_size[:,1] / (torch.sin(edge_angle*np.pi)+eps)))
+        edge_dis = edge_dis_ + tmp
         return edge_dis, edge_angle
 
     def forward_with_netlist(
