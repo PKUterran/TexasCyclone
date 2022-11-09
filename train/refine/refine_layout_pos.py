@@ -37,7 +37,7 @@ def select_target_box(
 
 def refined_layout_pos(
         layout: Layout,
-        box_w=200, box_h=200, density_threshold=1.0, stride_per=0.05, momentum_per=0.0, sample_num=10, epochs=5,
+        box_w=50, box_h=50, density_threshold=1.0, stride_per=0.05, momentum_per=0.0, sample_num=10, epochs=5,
         seed=0, use_momentum=True, use_tqdm=False
 ) -> np.ndarray:
     state = np.random.get_state()
