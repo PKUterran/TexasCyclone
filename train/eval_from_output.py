@@ -72,10 +72,10 @@ def eval_from_output(
                 rudy_metric = metric_dict['rudy_metric']
                 area_metric = metric_dict['area_metric']
                 overlap_metric = metric_dict['overlap_metric']
-                print(f'\t\tHPWL Metric: {hpwl_metric}')
-                print(f'\t\tRUDY Metric: {rudy_metric}')
-                print(f'\t\tArea Metric: {area_metric}')
-                print(f'\t\tOverlap Metric: {overlap_metric}')
+                print(f'\t\tHPWL Metric: {hpwl_metric / 1e9:.2f}B')
+                print(f'\t\tRUDY Metric: {rudy_metric / 1e3:.2f}K')
+                print(f'\t\tArea Metric: {area_metric / 1e6:.2f}M')
+                print(f'\t\tOverlap Metric: {overlap_metric / 1e6:.2f}M')
                 d = {
                     f'{netlist_name}-{token}_hpwl_metric': float(hpwl_metric),
                     f'{netlist_name}-{token}_rudy_metric': float(rudy_metric),

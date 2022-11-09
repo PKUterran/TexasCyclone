@@ -37,7 +37,7 @@ def select_target_box(
 
 def refined_layout_pos(
         layout: Layout,
-        box_w=50, box_h=50, density_threshold=1.0, stride_per=0.05, momentum_per=0.0, sample_num=10, epochs=5,
+        box_w=50, box_h=50, density_threshold=1.0, stride_per=0.005, momentum_per=5.0, sample_num=10, epochs=10,
         seed=0, use_momentum=True, use_tqdm=False
 ) -> np.ndarray:
     state = np.random.get_state()
@@ -52,19 +52,24 @@ def refined_layout_pos(
     terminal_set = set(terminal_indices)
     movable_set = set(range(n_cell)) - terminal_set
     shape = (int(layout_size[0] / box_w) + 1, int(layout_size[1] / box_h) + 1)
-    density_map = np.zeros(shape=shape, dtype=np.float32)
+    movable_density_map = np.zeros(shape=shape, dtype=np.float32)
+    terminal_density_map = np.zeros(shape=shape, dtype=np.float32)
     box_size = box_w * box_h
 
     print(f'\t\tInitializing density map...')
     for mid in movable_set:
-        if cell_pos[mid, 0] > layout_size[0] - 1:
-            cell_pos[mid, 0] = layout_size[0] - 1
-        if cell_pos[mid, 1] > layout_size[1] - 1:
-            cell_pos[mid, 1] = layout_size[1] - 1
+        if cell_pos[mid, 0] < cell_size[mid, 0] / 2:
+            cell_pos[mid, 0] = cell_size[mid, 0] / 2
+        if cell_pos[mid, 0] > layout_size[0] - cell_size[mid, 0] / 2:
+            cell_pos[mid, 0] = layout_size[0] - cell_size[mid, 0] / 2
+        if cell_pos[mid, 1] < cell_size[mid, 1] / 2:
+            cell_pos[mid, 1] = cell_size[mid, 1] / 2
+        if cell_pos[mid, 1] > layout_size[1] - cell_size[mid, 1] / 2:
+            cell_pos[mid, 1] = layout_size[1] - cell_size[mid, 1] / 2
         w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
         assert w < shape[0] or h < shape[1]
-        density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
-    print(f'\t\t\tMax density: {np.max(density_map):.3f}')
+        movable_density_map[w, h] += cell_size[mid, 0] * cell_size[mid, 1] / box_size
+    print(f'\t\t\tMax movavle density: {np.max(movable_density_map):.3f}')
 
     for tid in terminal_set:
         span = cell_span[tid, :]
@@ -74,7 +79,8 @@ def refined_layout_pos(
         h2 = min(h2 + 1, shape[1])
         if w2 <= w1 or h2 <= h1:
             continue
-        density_map[w1: w2, h1: h2] += 1e5
+        terminal_density_map[w1: w2, h1: h2] = 1e5
+    density_map = movable_density_map + terminal_density_map
 
     cell_momentum = np.zeros_like(cell_pos)
     dict_net_terminal_set: Dict[int, Set[int]] = {}
@@ -93,27 +99,32 @@ def refined_layout_pos(
             else:
                 dict_movable_net_set.setdefault(cell, set()).add(net)
 
-    def refresh_momentum():
+    def refresh_momentum(terminal_only=False):
         assert use_momentum is True
-        print(f'\t\tRefreshing momentum...')
+        if terminal_only:
+            print(f'\t\tRefreshing momentum...')
+        else:
+            print(f'\t\tRefreshing momentum with movables...')
         iter_dict = tqdm(dict_movable_net_set.items(), total=len(dict_movable_net_set)) \
             if use_tqdm else dict_movable_net_set.items()
         for mid, net_set in iter_dict:
-            # mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_terminal_set.setdefault(x, set()), net_set))
-            mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_cell_set[x], net_set))
-            mts.remove(mid)
+            if terminal_only:
+                mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_terminal_set.setdefault(x, set()), net_set))
+            else:
+                mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_cell_set[x], net_set))
             if len(mts) == 0:
                 continue
             t_pos = np.mean(cell_pos[list(mts), :], axis=0)
             delta_pos = t_pos - cell_pos[mid, :]
             cell_momentum[mid, :] = delta_pos / (np.linalg.norm(delta_pos) + 1e-3)
 
-    print(f'\t\tMoving cells...')
     stride_xy = (density_map.shape[0] * stride_per, density_map.shape[1] * stride_per)
     stride = np.sqrt(stride_xy[0] ** 2 + stride_xy[1] ** 2)
-    for _ in range(epochs):
+    for e in range(1, epochs + 1):
+        print(f'\tEpoch {e}:')
         if use_momentum:
-            refresh_momentum()
+            refresh_momentum(e <= 0.5 * epochs)
+        print(f'\t\tMoving cells...')
         iter_movable_set = tqdm(movable_set, total=len(movable_set)) if use_tqdm else movable_set
         for mid in iter_movable_set:
             w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
@@ -129,10 +140,10 @@ def refined_layout_pos(
             delta_density = cell_size[mid, 0] * cell_size[mid, 1] / box_size
             density_map[w, h] -= delta_density
             density_map[tw, th] += delta_density
-
+    
+    movable_density_map = density_map - terminal_density_map
     print(f'\t\t\tMax density with terminals: {np.max(density_map):.3f}')
-    density_map[density_map > 0.99e5] = 0
-    print(f'\t\t\tMax density: {np.max(density_map):.3f}')
+    print(f'\t\t\tMax density without terminals: {np.max(movable_density_map):.3f}')
     np.random.set_state(state)
     return cell_pos
 
