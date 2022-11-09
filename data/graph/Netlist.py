@@ -56,8 +56,6 @@ class Netlist:
             
         self._net_cell_indices_matrix = None
 
-        self._net_cell_indices_matrix = None
-
         if simple:
             return
         self._cell_flow = None

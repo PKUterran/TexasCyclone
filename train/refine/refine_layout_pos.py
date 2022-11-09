@@ -1,6 +1,6 @@
 import numpy as np
 from tqdm import tqdm
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Set
 from functools import reduce
 
 import os, sys
@@ -77,22 +77,31 @@ def refined_layout_pos(
         density_map[w1: w2, h1: h2] += 1e5
 
     cell_momentum = np.zeros_like(cell_pos)
+    dict_net_terminal_set: Dict[int, Set[int]] = {}
+    dict_net_cell_set: Dict[int, Set[int]] = {}
+    dict_movable_net_set: Dict[int, Set[int]] = {}
+
     if use_momentum:
-        print(f'\t\tCalculating momentum...')
-        dict_net_terminal_set = {}
-        dict_movable_net_set = {}
+        print(f'\t\tConstructing sets...')
         nets, cells = layout.netlist.graph.edges(etype='pinned')
         iter_zip = tqdm(zip(nets, cells), total=layout.netlist.n_pin) if use_tqdm else zip(nets, cells)
         for net, cell in iter_zip:
             net, cell = int(net), int(cell)
+            dict_net_cell_set.setdefault(net, set()).add(cell)
             if cell in terminal_set:
                 dict_net_terminal_set.setdefault(net, set()).add(cell)
             else:
                 dict_movable_net_set.setdefault(cell, set()).add(net)
+
+    def refresh_momentum():
+        assert use_momentum is True
+        print(f'\t\tRefreshing momentum...')
         iter_dict = tqdm(dict_movable_net_set.items(), total=len(dict_movable_net_set)) \
             if use_tqdm else dict_movable_net_set.items()
         for mid, net_set in iter_dict:
-            mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_terminal_set.setdefault(x, set()), net_set))
+            # mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_terminal_set.setdefault(x, set()), net_set))
+            mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_cell_set[x], net_set))
+            mts.remove(mid)
             if len(mts) == 0:
                 continue
             t_pos = np.mean(cell_pos[list(mts), :], axis=0)
@@ -103,6 +112,8 @@ def refined_layout_pos(
     stride_xy = (density_map.shape[0] * stride_per, density_map.shape[1] * stride_per)
     stride = np.sqrt(stride_xy[0] ** 2 + stride_xy[1] ** 2)
     for _ in range(epochs):
+        if use_momentum:
+            refresh_momentum()
         iter_movable_set = tqdm(movable_set, total=len(movable_set)) if use_tqdm else movable_set
         for mid in iter_movable_set:
             w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
