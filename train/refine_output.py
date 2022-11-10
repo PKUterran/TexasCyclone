@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from data.load_data import netlist_from_numpy_directory, layout_from_netlist_cell_pos
 from data.utils import set_seed
-from train.refine import refined_layout_pos
+from train.refine import refined_layout_pos, refined_force_pos
 
 
 def refine_output(
@@ -33,6 +33,7 @@ def refine_output(
             print(f'\tFor {netlist_name} with {token} output:')
             output_pos = torch.tensor(np.load(output_file), dtype=torch.float32) + netlist.cell_prop_dict['size'] / 2
             layout = layout_from_netlist_cell_pos(netlist, output_pos)
-            refine_pos = refined_layout_pos(layout, use_tqdm=use_tqdm)
+            # refine_pos = refined_layout_pos(layout, use_tqdm=use_tqdm)
+            refine_pos = refined_force_pos(layout, use_tqdm=use_tqdm)
             np.save(refine_file,
                     refine_pos - np.array(netlist.cell_prop_dict['size'].cpu().detach(), dtype=np.float32) / 2)
