@@ -37,7 +37,7 @@ def select_target_box(
 
 def refined_layout_pos(
         layout: Layout,
-        box_w=50, box_h=50, density_threshold=1.0, stride_per=0.005, momentum_per=5.0, sample_num=10, epochs=10,
+        box_w=10, box_h=10, density_threshold=10.0, stride_per=0.003, momentum_per=5.0, sample_num=50, epochs=10,
         seed=0, use_momentum=True, use_tqdm=False
 ) -> np.ndarray:
     state = np.random.get_state()
@@ -118,10 +118,11 @@ def refined_layout_pos(
             delta_pos = t_pos - cell_pos[mid, :]
             cell_momentum[mid, :] = delta_pos / (np.linalg.norm(delta_pos) + 1e-3)
 
-    stride_xy = (density_map.shape[0] * stride_per, density_map.shape[1] * stride_per)
-    stride = np.sqrt(stride_xy[0] ** 2 + stride_xy[1] ** 2)
     for e in range(1, epochs + 1):
-        print(f'\tEpoch {e}:')
+        stride_xy = (density_map.shape[0] * stride_per * (1 + 4 * e / epochs), 
+                     density_map.shape[1] * stride_per * (1 + 4 * e / epochs))
+        stride = np.sqrt(stride_xy[0] ** 2 + stride_xy[1] ** 2)
+        print(f'\tEpoch {e}: stride = {stride}')
         if use_momentum:
             refresh_momentum(e <= 0.5 * epochs)
         print(f'\t\tMoving cells...')
