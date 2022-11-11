@@ -18,10 +18,11 @@ class RUDYMetric(MetricFunction):
         shape = (int(layout_size[0] / self.w) + 1, int(layout_size[1] / self.h) + 1)
         cong_map = np.zeros(shape=shape, dtype=np.float32)
 
-        iter_net_span_degree = tqdm(zip(net_span, net_degree), total=net_span.shape[0]) if self.use_tqdm else zip(net_span, net_degree)
+        iter_net_span_degree = tqdm(zip(net_span, net_degree), total=net_span.shape[0]) \
+            if self.use_tqdm else zip(net_span, net_degree)
         for span, (degree,) in iter_net_span_degree:
             w1, w2 = map(int, span[[0, 2]] / self.w)
-            h1, h2 = map(int, span[[0, 2]] / self.h)
+            h1, h2 = map(int, span[[1, 3]] / self.h)
             density = degree / (w2 - w1 + 1) / (h2 - h1 + 1)
             w2 = min(w2 + 1, shape[0])
             h2 = min(h2 + 1, shape[1])

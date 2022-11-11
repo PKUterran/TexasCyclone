@@ -74,7 +74,6 @@ def assemble_layout(dict_layout: Dict[int, Layout], device) -> Layout:
 def assemble_layout_with_netlist_info(dict_netlist_info: Dict[int, Dict[str, Any]], dict_netlist: Dict[int, Netlist],
                                       device) -> Layout:
     original_netlist: Netlist = dict_netlist[-1].original_netlist
-    original_netlist._net_cell_indices_matrix = None
     cell_pos = torch.zeros(
         size=[original_netlist.graph.num_nodes(ntype='cell') + len(dict_netlist_info) - 1, 2],
         dtype=torch.float32, device=device
@@ -85,10 +84,11 @@ def assemble_layout_with_netlist_info(dict_netlist_info: Dict[int, Dict[str, Any
     else:
         for nid, sub_netlist in dict_netlist.items():
             if nid == -1:
-                cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = dict_netlist_info[nid]['cell_pos'].to(cell_pos.device)
+                cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = \
+                    dict_netlist_info[nid]['cell_pos'].to(device)
             else:
-                abs_cell_pos = dict_netlist_info[nid]['cell_pos'].to(cell_pos.device) + \
-                               dict_netlist_info[-1]['cell_pos'][nid, :].to(cell_pos.device) - \
+                abs_cell_pos = dict_netlist_info[nid]['cell_pos'].to(device) + \
+                               dict_netlist_info[-1]['cell_pos'][nid, :].to(device) - \
                                torch.tensor(dict_netlist[nid].layout_size, dtype=torch.float32, device=device) / 2
                 cell_pos[sub_netlist.graph.nodes['cell'].data[dgl.NID], :] = abs_cell_pos
         layout = Layout(original_netlist, cell_pos[:original_netlist.graph.num_nodes(ntype='cell'), :])
