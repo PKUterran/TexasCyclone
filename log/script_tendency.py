@@ -40,7 +40,8 @@ def tendency() -> Dict[str, Any]:
 
 TUPLES = [
 #     ('default', 'ours/default'),
-    ('xpre', 'ours/xpre'),
+    # ('xpre', 'ours/xpre'),
+    ('train-naive-bidir-l1-xoverlap','./log/ours/train-naive-bidir-l1-xoverlap')
 ]
 
 

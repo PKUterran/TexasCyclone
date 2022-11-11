@@ -45,12 +45,21 @@ def parse_train_args() -> argparse.Namespace:
     )
     args_parser.add_argument(
         '--pass_type', type=str, default='single',
-        help='hidden dim of pin features'
+        help='use single or bidirection message passage'
     )
 
     # Training settings
     args_parser.add_argument(
+<<<<<<< Updated upstream
         '--lr', type=float, default=1e-4,
+=======
+        '--use_hierarchical', action='store_true',
+        help='if use hierarchical'
+    )
+
+    args_parser.add_argument(
+        '--lr', type=float, default=1e-5,
+>>>>>>> Stashed changes
         help='learning rate'
     )
     args_parser.add_argument(

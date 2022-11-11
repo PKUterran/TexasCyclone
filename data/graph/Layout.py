@@ -81,7 +81,7 @@ def assemble_layout_with_netlist_info(dict_netlist_info: Dict[int, Dict[str, Any
     )
     if len(dict_netlist_info) == 1:
         # TODO: 直接生成layout
-        raise NotImplementedError
+        return Layout(original_netlist,dict_netlist_info[-1]['cell_pos'])
     else:
         for nid, sub_netlist in dict_netlist.items():
             if nid == -1:

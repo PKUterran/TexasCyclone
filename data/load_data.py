@@ -14,7 +14,8 @@ from data.graph.Layout import Layout
 
 def netlist_from_numpy_directory(
         dir_name: str,
-        save_type: int = 1
+        use_hierarchical: bool = True,
+        save_type: int = 1,
 ) -> Netlist:
     # 0: ignore cache; 1: use and dump cache; 2: force dump cache
     print(f'\tLoading {dir_name}')
@@ -33,7 +34,7 @@ def netlist_from_numpy_directory(
         cells_pos_corner = np.load(f'{dir_name}/cell_pos.npy')
     else:
         cells_pos_corner = np.zeros(shape=[n_cell, 2], dtype=np.float)
-    if os.path.exists(f'{dir_name}/cell_clusters.json'):
+    if os.path.exists(f'{dir_name}/cell_clusters.json') and (use_hierarchical):
         with open(f'{dir_name}/cell_clusters.json') as fp:
             cell_clusters = json.load(fp)
     else:
