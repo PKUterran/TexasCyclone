@@ -22,7 +22,7 @@ def select_target_box(
         return None
 
     for _ in range(sample_num):
-        flip_x, flip_y = stride_xy[0] * 2 * np.random.random(), stride_xy[1] * 2 * np.random.random()
+        flip_x, flip_y = stride_xy[0] * (2 * np.random.random() - 1), stride_xy[1] * (2 * np.random.random() - 1)
         if momentum is not None:
             flip_x += momentum[0] * stride * np.random.random() * momentum_per
             flip_y += momentum[1] * stride * np.random.random() * momentum_per

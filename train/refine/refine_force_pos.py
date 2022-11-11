@@ -23,7 +23,7 @@ def select_target_box(
         return w, h
 
     for _ in range(sample_num):
-        flip_x, flip_y = stride_xy[0] * 2 * np.random.random(), stride_xy[1] * 2 * np.random.random()
+        flip_x, flip_y = stride_xy[0] * (2 * np.random.random() - 1), stride_xy[1] * (2 * np.random.random() - 1)
         if momentum is not None:
             flip_x += momentum[0] * stride * np.random.random() * momentum_per
             flip_y += momentum[1] * stride * np.random.random() * momentum_per
@@ -38,7 +38,7 @@ def select_target_box(
 
 def refined_force_pos(
         layout: Layout,
-        box_w=10, box_h=10, density_threshold=1.0, stride_per=0.003, momentum_per=5.0, sample_num=50, epochs=100,
+        box_w=10, box_h=10, density_threshold=0.5, stride_per=0.0005, momentum_per=5.0, sample_num=10, epochs=50,
         seed=0, use_momentum=True, use_tqdm=False
 ) -> np.ndarray:
     state = np.random.get_state()
@@ -110,6 +110,8 @@ def refined_force_pos(
             print(f'\t\tRefreshing momentum with movables...')
         iter_set = tqdm(left_cell_set, total=len(left_cell_set)) if use_tqdm else left_cell_set
         for cid in iter_set:
+            if cid not in dict_movable_net_set.keys():
+                continue
             net_set = dict_movable_net_set[cid]
             if terminal_only:
                 mts = reduce(lambda x, y: x | y, map(lambda x: dict_net_terminal_set.setdefault(x, set()), net_set))
@@ -122,14 +124,14 @@ def refined_force_pos(
             cell_momentum[cid, :] = delta_pos / (np.linalg.norm(delta_pos) + 1e-3)
 
     for e in range(1, epochs + 1):
-        stride_per = min(1.0, stride_per * 1.3)
+        stride_per = min(1.0, stride_per * 1.2)
         stride_xy = (density_map.shape[0] * stride_per, density_map.shape[1] * stride_per)
         stride = np.sqrt(stride_xy[0] ** 2 + stride_xy[1] ** 2)
-        print(f'\tEpoch {e}: stride is {stride}, {len(left_cell_set)} cells left')
+        print(f'\tEpoch {e}: stride is {stride:.1f}, {len(left_cell_set)} cells left')
         if use_momentum:
             refresh_momentum(e <= 2)
         print(f'\t\tMoving cells...')
-        iter_movable_set = tqdm(left_cell_set, total=len(left_cell_set)) if use_tqdm else left_cell_set
+        iter_movable_set = tqdm(deepcopy(left_cell_set), total=len(left_cell_set)) if use_tqdm else deepcopy(left_cell_set)
         for mid in iter_movable_set:
             w, h = int(cell_pos[mid, 0] / box_w), int(cell_pos[mid, 1] / box_h)
             twh = select_target_box(
@@ -147,6 +149,9 @@ def refined_force_pos(
             delta_density = cell_size[mid, 0] * cell_size[mid, 1] / box_size
             density_map[w, h] -= delta_density
             density_map[tw, th] += delta_density
+        if len(left_cell_set) == 0:
+            print(f'\tFinished!')
+            break
 
     movable_density_map = density_map - terminal_density_map
     print(f'\t\t\tMax density with terminals: {np.max(density_map):.3f}')
