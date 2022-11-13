@@ -4,7 +4,7 @@ import tqdm
 from typing import Tuple, List
 
 from data.graph import Layout
-from .LossFunction import LossFunction
+from .function import LossFunction, MetricFunction
 
 
 def greedy_sample(layout: Layout, span) -> Tuple[List[int], List[int]]:
@@ -37,7 +37,7 @@ def macro_sample(layout: Layout, max_cap) -> Tuple[List[int], List[int]]:
 
 
 def calc_overlap_xy(layout: Layout, sample_i: List[int], sample_j: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
-    cell_size = layout.netlist.cell_prop_dict['size']
+    cell_size = layout.netlist.cell_prop_dict['size'].to(layout.cell_pos.device)
     cell_pos = layout.cell_pos
     sample_cell_size_i = cell_size[sample_i, :]
     sample_cell_size_j = cell_size[sample_j, :]
@@ -73,3 +73,16 @@ class MacroOverlapLoss(LossFunction):
         overlap_x, overlap_y = calc_overlap_xy(layout, sample_i, sample_j)
         return torch.mean(torch.sqrt(overlap_x * overlap_y + 1e-3))
 
+
+class OverlapMetric(MetricFunction):
+    def __init__(self, span=4, max_cap=500):
+        super(OverlapMetric, self).__init__()
+        self.span = span
+        self.max_cap = max_cap
+
+    def calculate(self, layout: Layout, *args, **kwargs) -> float:
+        greedy_sample_i, greedy_sample_j = greedy_sample(layout, self.span)
+        macro_sample_i, macro_sample_j = macro_sample(layout, self.max_cap)
+        overlap_x, overlap_y = calc_overlap_xy(
+            layout, greedy_sample_i + macro_sample_i, greedy_sample_j + macro_sample_j)
+        return float(torch.sum(overlap_x * overlap_y).cpu().clone().detach().data)

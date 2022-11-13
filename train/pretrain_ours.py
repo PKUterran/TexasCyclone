@@ -139,7 +139,7 @@ def pretrain_ours(
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
                 batch_cell_size.append(netlist.cell_prop_dict['size'])
-                if total_batch_nodes_num > 5000 or j == n_netlist - 1:
+                if cnt_graph > 128 or j == n_netlist - 1:
                     batch_cell_feature = torch.vstack(batch_cell_feature)
                     batch_net_feature = torch.vstack(batch_net_feature)
                     batch_pin_feature = torch.vstack(batch_pin_feature)

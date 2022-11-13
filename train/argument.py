@@ -50,16 +50,12 @@ def parse_train_args() -> argparse.Namespace:
 
     # Training settings
     args_parser.add_argument(
-<<<<<<< Updated upstream
-        '--lr', type=float, default=1e-4,
-=======
         '--use_hierarchical', action='store_true',
         help='if use hierarchical'
     )
 
     args_parser.add_argument(
         '--lr', type=float, default=1e-5,
->>>>>>> Stashed changes
         help='learning rate'
     )
     args_parser.add_argument(

@@ -1,8 +1,8 @@
 from data.utils import check_dir
 from train.argument import parse_train_args
-from train.eval_dreamplace import eval_dreamplace
+from train.eval_ours import eval_ours
 
-LOG_DIR = 'log/dreamplace'
+LOG_DIR = 'log/ours'
 eval_datasets = [
     '../Placement-datasets/dac2012/superblue2',
     '../Placement-datasets/dac2012/superblue3',
@@ -14,8 +14,7 @@ eval_datasets = [
 if __name__ == '__main__':
     check_dir(LOG_DIR)
     args = parse_train_args()
-    eval_dreamplace(
-        name='default',
+    eval_ours(
         args=args,
         eval_datasets=eval_datasets,
         log_dir=LOG_DIR,

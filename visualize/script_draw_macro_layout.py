@@ -36,7 +36,7 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None, names: Opt
         ax.set_xlim(min_x - 0.1 * scale_x, max_x + 0.1 * scale_x)
         ax.set_ylim(min_y - 0.1 * scale_y, max_y + 0.1 * scale_y)
 
-        ax.scatter(cell_pos[:, 0] + cell_size[: 0] / 2, cell_pos[:, 1] + cell_size[: 1] / 2, c='orange', s=1)
+        ax.scatter(cell_pos[:, 0] + cell_size[:, 0] / 2, cell_pos[:, 1] + cell_size[:, 1] / 2, c='orange', s=1)
         
         for i in tqdm(cell_indices):
             ax.add_patch(plt.Rectangle(
@@ -55,15 +55,16 @@ def draw_macro_layout(directory: str, copy_dir: Optional[str] = None, names: Opt
 
 DRAW_DIRECTORIES = [
     '../../Placement-datasets/dac2012/superblue2',
-    '../../Placement-datasets/dac2012/superblue3',
-    '../../Placement-datasets/dac2012/superblue6',
-    '../../Placement-datasets/dac2012/superblue7',
-    '../../Placement-datasets/dac2012/superblue9',
+#     '../../Placement-datasets/dac2012/superblue3',
+#     '../../Placement-datasets/dac2012/superblue6',
+#     '../../Placement-datasets/dac2012/superblue7',
+#     '../../Placement-datasets/dac2012/superblue9',
 #     '../data/test/dataset1/medium',
 ]
 
 NAMES = [
-    'xpre'
+#     'default',
+    'refine-xpre',
 ]
 
 
