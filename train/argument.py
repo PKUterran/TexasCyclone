@@ -103,6 +103,11 @@ def parse_train_args() -> argparse.Namespace:
         help='weight of congestion loss'
     )
 
+    args_parser.add_argument(
+        '--param_json', type=str, default='',
+        help='param json path'
+    )
+
     args = args_parser.parse_args()
     return args
 
@@ -190,6 +195,11 @@ def parse_pretrain_args() -> argparse.Namespace:
     args_parser.add_argument(
         '--angle_lambda', type=float, default=1e-1,
         help='weight of angle loss'
+    )
+
+    args_parser.add_argument(
+        '--param_json', type=str, default='',
+        help='param json path'
     )
 
     args = args_parser.parse_args()
