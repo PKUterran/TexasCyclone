@@ -64,7 +64,6 @@ class NaiveGNN(nn.Module):
         cell_feat = cell_feat.to(self.device)
         net_feat = net_feat.to(self.device)
         pin_feat = pin_feat.to(self.device)
-
         hidden_cell_feat = torch.tanh(self.cell_lin(cell_feat))
         hidden_net_feat = torch.tanh(self.net_lin(net_feat))
         hidden_pin_feat = torch.tanh(self.pin_lin(pin_feat))

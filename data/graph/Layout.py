@@ -74,13 +74,14 @@ def assemble_layout(dict_layout: Dict[int, Layout], device) -> Layout:
 def assemble_layout_with_netlist_info(dict_netlist_info: Dict[int, Dict[str, Any]], dict_netlist: Dict[int, Netlist],
                                       device) -> Layout:
     original_netlist: Netlist = dict_netlist[-1].original_netlist
+    original_netlist._net_cell_indices_matrix = None
     cell_pos = torch.zeros(
         size=[original_netlist.graph.num_nodes(ntype='cell') + len(dict_netlist_info) - 1, 2],
         dtype=torch.float32, device=device
     )
     if len(dict_netlist_info) == 1:
         # TODO: 直接生成layout
-        raise NotImplementedError
+        return Layout(original_netlist,dict_netlist_info[-1]['cell_pos'])
     else:
         for nid, sub_netlist in dict_netlist.items():
             if nid == -1:

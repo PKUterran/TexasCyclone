@@ -45,10 +45,15 @@ def parse_train_args() -> argparse.Namespace:
     )
     args_parser.add_argument(
         '--pass_type', type=str, default='single',
-        help='hidden dim of pin features'
+        help='use single or bidirection message passage'
     )
 
     # Training settings
+    args_parser.add_argument(
+        '--use_hierarchical', action='store_true',
+        help='if use hierarchical'
+    )
+
     args_parser.add_argument(
         '--lr', type=float, default=1e-5,
         help='learning rate'
@@ -96,6 +101,11 @@ def parse_train_args() -> argparse.Namespace:
     args_parser.add_argument(
         '--cong_lambda', type=float, default=1e-3,
         help='weight of congestion loss'
+    )
+
+    args_parser.add_argument(
+        '--param_json', type=str, default='',
+        help='param json path'
     )
 
     args = args_parser.parse_args()
@@ -185,6 +195,11 @@ def parse_pretrain_args() -> argparse.Namespace:
     args_parser.add_argument(
         '--angle_lambda', type=float, default=1e-1,
         help='weight of angle loss'
+    )
+
+    args_parser.add_argument(
+        '--param_json', type=str, default='',
+        help='param json path'
     )
 
     args = args_parser.parse_args()

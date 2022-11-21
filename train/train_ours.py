@@ -37,9 +37,10 @@ def train_ours(
     # Load data
     # torch.autograd.set_detect_anomaly(True)
     print(f'Loading data...')
-    train_netlists = [netlist_from_numpy_directory(dataset) for dataset in train_datasets]
-    valid_netlists = [netlist_from_numpy_directory(dataset) for dataset in valid_datasets]
-    test_netlists = [netlist_from_numpy_directory(dataset) for dataset in test_datasets]
+    print(args.use_hierarchical)
+    train_netlists = [netlist_from_numpy_directory(dataset,args.use_hierarchical,1) for dataset in train_datasets]
+    valid_netlists = [netlist_from_numpy_directory(dataset,args.use_hierarchical,1) for dataset in valid_datasets]
+    test_netlists = [netlist_from_numpy_directory(dataset,args.use_hierarchical,1) for dataset in test_datasets]
     print(f'\t# of samples: '
           f'{len(train_netlists)} train, '
           f'{len(valid_netlists)} valid, '

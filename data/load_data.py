@@ -14,7 +14,8 @@ from data.graph.Layout import Layout
 
 def netlist_from_numpy_directory(
         dir_name: str,
-        save_type: int = 1
+        use_hierarchical: bool = True,
+        save_type: int = 1,
 ) -> Netlist:
     # 0: ignore cache; 1: use and dump cache; 2: force dump cache
     print(f'\tLoading {dir_name}')
