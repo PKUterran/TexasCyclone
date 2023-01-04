@@ -2,6 +2,7 @@ import numpy as np
 import dgl
 import queue
 import torch
+import time
 from typing import Tuple, List, Dict, Sequence, Set
 from copy import deepcopy
 
@@ -15,6 +16,7 @@ class CellFlow:
         n_cell = graph.num_nodes(ntype='cell')
 
         # 1. Get cell connection
+        t0 = time.time()
         list_net_cells: List[Set[int]] = [set() for _ in range(n_net)]
         list_cell_nets: List[Set[int]] = [set() for _ in range(n_cell)]
         for net, cell in zip(*graph.edges(etype='pinned')):
@@ -42,8 +44,10 @@ class CellFlow:
                     if len(fathers_list[adj_cell]) == 0:
                         cell_queue.put(adj_cell)
                     fathers_list[adj_cell].append((cell, net))
+        print(time.time() - t0)
 
         # 4. Collect the flow edges
+        t0 = time.time()
         dict_cell_net_children: Dict[int, List[Tuple[int, int]]] = {}
         for i, fathers in enumerate(fathers_list):
             for f in fathers:
@@ -72,8 +76,7 @@ class CellFlow:
                 if k[0] == -1:
                     temp_path.append(i)
                 else:
-                    flow_edge_indices.append(np.array(
-                        (fathers_list[k[0]][0][0], fathers_list[k[0]][0][1], k[0], k[1], k[2]), dtype=np.int))
+                    flow_edge_indices.append((fathers_list[k[0]][0][0], fathers_list[k[0]][0][1], k[0], k[1], k[2]))
                     temp_path.append(edge_cnt)
                     edge_cnt += 1
                 cell_paths[k[2]].append(np.array(deepcopy(temp_path)))
@@ -84,15 +87,18 @@ class CellFlow:
                         if child in set_terminals:
                             continue
                         edge_stack.put((k[2], net, child))
+        print(time.time() - t0)
 
         # time/space complexity: O(D * P)
         # where D is the max depth of CellFlow and P is the # of pins
+        t0 = time.time()
         assert len(flow_edge_indices) == edge_cnt
         # self.fathers_list = np.array(fathers_list,dtype=object)
         self.flow_edge_cnt = edge_cnt
         # cell->net->*cell*->net->cell
         self.flow_edge_indices = np.array(flow_edge_indices)
         self.cell_paths = np.array(cell_paths, dtype=object)
+        print(time.time() - t0)
         """
         这里用numpy.array存储能减少内存开销
         """
