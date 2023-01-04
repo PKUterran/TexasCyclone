@@ -72,7 +72,8 @@ class CellFlow:
                 if k[0] == -1:
                     temp_path.append(i)
                 else:
-                    flow_edge_indices.append((fathers_list[k[0]][0][0], fathers_list[k[0]][0][1], k[0], k[1], k[2]))
+                    flow_edge_indices.append(np.array(
+                        (fathers_list[k[0]][0][0], fathers_list[k[0]][0][1], k[0], k[1], k[2]), dtype=np.int))
                     temp_path.append(edge_cnt)
                     edge_cnt += 1
                 cell_paths[k[2]].append(np.array(deepcopy(temp_path)))
