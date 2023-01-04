@@ -95,6 +95,20 @@ class Netlist:
         self.graph.edges['points-to'].data['net_ids'] = net_indices
         self.graph.edges['points-to'].data['father_net_ids'] = father_net_indices
 
+        if hierarchical:
+            print('\t\ttotal size:', asizeof.asizeof(self) / 2 ** 20)
+            print('\t\tgraph size:', asizeof.asizeof(self.graph) / 2 ** 20)
+            print('\t\toriginal_netlist size:', asizeof.asizeof(self.original_netlist) / 2 ** 20)
+            print('\t\tdict_sub_netlist size:', asizeof.asizeof(self.dict_sub_netlist) / 2 ** 20)
+            print('\t\tcell_prop_dict size:', asizeof.asizeof(self.cell_prop_dict) / 2 ** 20)
+            print('\t\tnet_prop_dict size:', asizeof.asizeof(self.net_prop_dict) / 2 ** 20)
+            print('\t\tpin_prop_dict size:', asizeof.asizeof(self.pin_prop_dict) / 2 ** 20)
+            print('\t\tcell_flow size:', asizeof.asizeof(self.cell_flow) / 2 ** 20)
+            print('\t\tcell_path_edge_matrix size:', asizeof.asizeof(self.cell_path_edge_matrix) / 2 ** 20)
+            print('\t\tpath_cell_matrix size:', asizeof.asizeof(self.path_cell_matrix) / 2 ** 20)
+            print('\t\tpath_edge_matrix size:', asizeof.asizeof(self.path_edge_matrix) / 2 ** 20)
+            print('\t\tedge_ends_path_indices size:', asizeof.asizeof(self.edge_ends_path_indices) / 2 ** 20)
+
     @property
     def cell_flow(self) -> CellFlow:
         if self._cell_flow is None:

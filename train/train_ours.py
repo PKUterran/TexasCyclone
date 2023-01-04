@@ -177,13 +177,13 @@ def train_ours(
                     batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
                     batch_cell_size = torch.vstack(batch_cell_size)
-                    batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
-                    # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                    batch_edge_dis, batch_edge_deflect = model.forward(
+                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature), batch_cell_size)
+                    # batch_edge_dis,batch_edge_deflect = batch_edge_dis.cpu(),batch_edge_deflect.cpu()
                     for nid, sub_netlist in enumerate(batch_netlist):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
-                        edge_dis, edge_angle = batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
-                        layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist, edge_dis, edge_angle)
+                        edge_dis, edge_deflect = batch_edge_dis[begin_idx:end_idx], batch_edge_deflect[begin_idx:end_idx]
+                        layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist, edge_dis, edge_deflect)
                         assert not torch.isnan(dis_loss), f"{dis_loss}"
                         assert not torch.isinf(dis_loss), f"{dis_loss}"
                         loss_dict = calc_loss(layout)
@@ -257,17 +257,17 @@ def train_ours(
                             batch_graph.append(netlist.graph)
                         # batch_graph = dgl.batch([sub_netlist.graph for _,sub_netlist in batch_netlist_id])
                         batch_graph = dgl.batch(batch_graph)
-                        batch_edge_dis, batch_edge_angle = model.forward(
+                        batch_edge_dis, batch_edge_deflect = model.forward(
                             batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
-                        # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
+                        # batch_edge_dis,batch_edge_deflect = batch_edge_dis.cpu(),batch_edge_deflect.cpu()
                         total_dis.append(batch_edge_dis.unsqueeze(1))
-                        total_angle.append(batch_edge_angle.unsqueeze(1))
+                        total_angle.append(batch_edge_deflect.unsqueeze(1))
                         for j, nid_ in enumerate(batch_netlist_id):
                             sub_netlist_ = dict_netlist[nid_]
                             begin_idx, end_idx = sub_netlist_feature_idrange[j]
-                            edge_dis, edge_angle = \
-                                batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
-                            layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist_, edge_dis, edge_angle)
+                            edge_dis, edge_deflect = \
+                                batch_edge_dis[begin_idx:end_idx], batch_edge_deflect[begin_idx:end_idx]
+                            layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist_, edge_dis, edge_deflect)
                             assert not torch.isnan(dis_loss)
                             assert not torch.isinf(dis_loss)
                             loss_dict = calc_loss(layout)
