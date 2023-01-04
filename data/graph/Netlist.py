@@ -81,19 +81,19 @@ class Netlist:
         fathers, sons = zip(*self.cell_flow.flow_edge_indices[len(self.terminal_indices):])
         self.graph.add_edges(fathers, sons, etype='points-to')
         self.graph.add_edges(sons, fathers, etype='pointed-from')
-        father_indices = torch.tensor(
-            self.cell_flow.flow_edge_father_indices[len(self.terminal_indices):], dtype=torch.int64)
-        net_indices = torch.tensor(
-            self.cell_flow.flow_edge_net_indices[len(self.terminal_indices):], dtype=torch.int64)
-        father_net_indices = torch.tensor(
-            self.cell_flow.flow_edge_father_net_indices[len(self.terminal_indices):], dtype=torch.int64)
-        for i in range(len(fathers)):
-            if father_indices[i, 0] == -1:
-                father_indices[i, 0] = fathers[i]
-                father_net_indices[i, 0] = net_indices[i, 0]
-        self.graph.edges['points-to'].data['father_ids'] = father_indices
-        self.graph.edges['points-to'].data['net_ids'] = net_indices
-        self.graph.edges['points-to'].data['father_net_ids'] = father_net_indices
+        # father_indices = torch.tensor(
+        #     self.cell_flow.flow_edge_father_indices[len(self.terminal_indices):], dtype=torch.int64)
+        # net_indices = torch.tensor(
+        #     self.cell_flow.flow_edge_net_indices[len(self.terminal_indices):], dtype=torch.int64)
+        # father_net_indices = torch.tensor(
+        #     self.cell_flow.flow_edge_father_net_indices[len(self.terminal_indices):], dtype=torch.int64)
+        # for i in range(len(fathers)):
+        #     if father_indices[i, 0] == -1:
+        #         father_indices[i, 0] = fathers[i]
+        #         father_net_indices[i, 0] = net_indices[i, 0]
+        # self.graph.edges['points-to'].data['father_ids'] = father_indices
+        # self.graph.edges['points-to'].data['net_ids'] = net_indices
+        # self.graph.edges['points-to'].data['father_net_ids'] = father_net_indices
 
         if hierarchical:
             print('\t\ttotal size:', asizeof.asizeof(self) / 2 ** 20)
