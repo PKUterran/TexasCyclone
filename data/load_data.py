@@ -98,7 +98,7 @@ def netlist_from_numpy_directory(
         net_prop_dict=net_prop_dict,
         pin_prop_dict=pin_prop_dict,
         layout_size=layout_size,
-        hierarchical=cell_clusters is not None,
+        hierarchical=cell_clusters is not None and len(cell_clusters),
         cell_clusters=cell_clusters,
         original_netlist=Netlist(
             graph=deepcopy(graph),
@@ -114,17 +114,23 @@ def netlist_from_numpy_directory(
     return netlist
 
 
-def layout_from_netlist_dis_angle(
+def layout_from_netlist_dis_deflect(
         netlist: Netlist,
-        movable_edge_dis: torch.Tensor, movable_edge_angle: torch.Tensor,
+        movable_edge_dis: torch.Tensor, movable_edge_deflect: torch.Tensor,
 ) -> Tuple[Layout, torch.Tensor]:
-    movable_edge_pos = torch.stack([movable_edge_dis * torch.cos(movable_edge_angle * np.pi),
-                                    movable_edge_dis * torch.sin(movable_edge_angle * np.pi)]).t()
-    edge_pos = torch.vstack([netlist.terminal_edge_pos.to(movable_edge_pos.device), movable_edge_pos])
-    cell_pos = netlist.cell_path_edge_matrix.to(edge_pos.device) @ edge_pos
-    path_pos = netlist.path_edge_matrix.to(edge_pos.device) @ edge_pos
-    path_pos_discrepancy = path_pos - netlist.path_cell_matrix.to(cell_pos.device) @ cell_pos
-    return Layout(netlist, cell_pos), torch.mean(torch.norm(path_pos_discrepancy, dim=1))
+    device = movable_edge_dis.device
+    edge_deflect = torch.cat([netlist.terminal_edge_theta_rev, movable_edge_deflect])
+    path_angle = netlist.path_edge_matrix.to(device) @ edge_deflect
+    edge_angle = path_angle[netlist.edge_ends_path_indices.to(device)]
+    movable_edge_angle = edge_angle[len(netlist.terminal_indices):]
+    movable_edge_rel_pos = torch.stack([movable_edge_dis * torch.cos(movable_edge_angle),
+                                        movable_edge_dis * torch.sin(movable_edge_angle)]).t()
+    edge_rel_pos = torch.vstack([netlist.terminal_edge_rel_pos.to(device), movable_edge_rel_pos])
+    cell_rel_pos = netlist.cell_path_edge_matrix.to(device) @ edge_rel_pos
+    path_rel_pos = netlist.path_edge_matrix.to(device) @ edge_rel_pos
+    path_rel_pos_discrepancy = path_rel_pos - netlist.path_cell_matrix.to(device) @ cell_rel_pos
+    center_pos = torch.tensor(netlist.layout_size, dtype=torch.float32).to(device) / 2
+    return Layout(netlist, cell_rel_pos + center_pos), torch.mean(torch.norm(path_rel_pos_discrepancy, dim=1))
 
 
 def layout_from_netlist_cell_pos(netlist: Netlist, cell_pos: torch.Tensor):
@@ -136,8 +142,8 @@ def layout_from_netlist_ref(netlist: Netlist) -> Layout:
 
 
 if __name__ == '__main__':
-    # netlist_ = netlist_from_numpy_directory('test/dataset1/medium', save_type=2)
-    netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
+    netlist_ = netlist_from_numpy_directory('test/dataset1/large-noclu', save_type=2)
+    # netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
     print(netlist_.original_netlist.graph)
     print(netlist_.graph)
     # print(netlist_.cell_prop_dict)
@@ -154,6 +160,7 @@ if __name__ == '__main__':
     # print(netlist_.path_cell_matrix.to_dense().numpy())
     # print(netlist_.path_edge_matrix.to_dense().numpy())
     # print(netlist_.graph.edges(etype='points-to'))
+    # print(netlist_.graph.edges['points-to'].data)
     cnt = 0
     for k, v in netlist_.dict_sub_netlist.items():
         print(f'{k}:')
@@ -172,6 +179,7 @@ if __name__ == '__main__':
         # print(v.path_cell_matrix.to_dense().numpy())
         # print(v.path_edge_matrix.to_dense().numpy())
         # print(v.graph.edges(etype='points-to'))
+        # print(v.graph.edges['points-to'].data)
         cnt += 1
         if cnt >= 10:
             break

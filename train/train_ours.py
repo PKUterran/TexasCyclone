@@ -10,7 +10,7 @@ from time import time
 from tqdm import tqdm
 
 from data.graph import Netlist, Layout, expand_netlist, sequentialize_netlist, assemble_layout_with_netlist_info
-from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis_angle
+from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis_deflect
 from data.utils import set_seed, mean_dict
 from train.model import NaiveGNN, PlaceGNN
 from train.functions import AreaLoss, HPWLLoss, SampleOverlapLoss, MacroOverlapLoss, SampleNetOverlapLoss
@@ -183,7 +183,7 @@ def train_ours(
                     for nid, sub_netlist in enumerate(batch_netlist):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
                         edge_dis, edge_angle = batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
-                        layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist, edge_dis, edge_angle)
+                        layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist, edge_dis, edge_angle)
                         assert not torch.isnan(dis_loss), f"{dis_loss}"
                         assert not torch.isinf(dis_loss), f"{dis_loss}"
                         loss_dict = calc_loss(layout)
@@ -267,7 +267,7 @@ def train_ours(
                             begin_idx, end_idx = sub_netlist_feature_idrange[j]
                             edge_dis, edge_angle = \
                                 batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
-                            layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist_, edge_dis, edge_angle)
+                            layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist_, edge_dis, edge_angle)
                             assert not torch.isnan(dis_loss)
                             assert not torch.isinf(dis_loss)
                             loss_dict = calc_loss(layout)

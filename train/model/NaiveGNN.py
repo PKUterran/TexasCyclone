@@ -50,8 +50,8 @@ class NaiveGNN(nn.Module):
         else:
             raise NotImplementedError
 
-        self.edge_dis_readout = nn.Linear(2 * self.hidden_cell_feats, 1)
-        self.edge_angle_readout = nn.Linear(2 * self.hidden_cell_feats, 1)
+        self.edge_dis_readout = nn.Linear(2 * self.hidden_cell_feats + self.hidden_net_feats, 1)
+        self.edge_deflect_readout = nn.Linear(3 * self.hidden_cell_feats + 2 * self.hidden_net_feats, 1)
         self.to(self.device)
 
     def forward(
@@ -83,20 +83,26 @@ class NaiveGNN(nn.Module):
             hidden_cell_feat = h['cell']
 
         fathers, sons = graph.edges(etype='points-to')
+        father_id = graph.edges['points-to'].data['father_ids'][:, 0]
+        net_id = graph.edges['points-to'].data['net_ids'][:, 0]
+        father_net_id = graph.edges['points-to'].data['father_net_ids'][:, 0]
         hidden_cell_pair_feat = torch.cat([
             hidden_cell_feat[fathers, :],
-            hidden_cell_feat[sons, :]
+            hidden_cell_feat[sons, :],
+            hidden_net_feat[net_id, :]
+        ], dim=-1)
+        hidden_cell_pair_feat_extend = torch.cat([
+            hidden_cell_pair_feat,
+            hidden_cell_feat[father_id, :],
+            hidden_net_feat[father_net_id, :],
         ], dim=-1)
         # print(torch.max(self.edge_dis_readout(hidden_cell_pair_feat)),torch.min(self.edge_dis_readout(hidden_cell_pair_feat)))
         edge_dis_ = torch.exp(-2 + 15 * torch.tanh(self.edge_dis_readout(hidden_cell_pair_feat))).view(-1)
-        edge_angle = torch.tanh(self.edge_angle_readout(hidden_cell_pair_feat)).view(-1) * 4
+        edge_deflect = torch.tanh(self.edge_deflect_readout(hidden_cell_pair_feat_extend)).view(-1) * 2 * torch.pi
         cell_size = cell_size.to(self.device)
         bound_size = (cell_size[fathers] + cell_size[sons]).to(self.device) / 2
-        eps = torch.ones_like(edge_angle).to(self.device) * 1e-4
-        tmp = torch.min(torch.abs(bound_size[:, 0] / (torch.cos(edge_angle * np.pi) + eps)),
-                        torch.abs(bound_size[:, 1] / (torch.sin(edge_angle * np.pi) + eps)))
-        edge_dis = edge_dis_ + tmp
-        return edge_dis, edge_angle
+        edge_dis = edge_dis_ + torch.min(bound_size, dim=1)[0]
+        return edge_dis, edge_deflect
 
     def forward_with_netlist(
             self,

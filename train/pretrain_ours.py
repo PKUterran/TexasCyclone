@@ -157,7 +157,7 @@ def pretrain_ours(
                         edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device))
                         loss = sum((
                             edge_dis_loss * 1.0,
-                            edge_angle_loss * 0.1,
+                            edge_angle_loss * 1.0,
                         ))
                         losses.append(loss)
                     (sum(losses) / len(losses)).backward()

@@ -9,7 +9,7 @@ from time import time
 from tqdm import tqdm
 
 from data.graph import Netlist, Layout, expand_netlist, assemble_layout_with_netlist_info
-from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis_angle
+from data.load_data import netlist_from_numpy_directory, layout_from_netlist_dis_deflect
 from data.utils import set_seed
 from train.model import NaiveGNN, PlaceGNN
 from train.functions import HPWLMetric, RUDYMetric, AreaMetric, OverlapMetric
@@ -143,7 +143,7 @@ def eval_ours(
                         begin_idx, end_idx = sub_netlist_feature_idrange[j]
                         edge_dis, edge_angle = \
                             batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
-                        layout, dis_loss = layout_from_netlist_dis_angle(sub_netlist_, edge_dis, edge_angle)
+                        layout, dis_loss = layout_from_netlist_dis_deflect(sub_netlist_, edge_dis, edge_angle)
                         dni[nid_]['cell_pos'] = copy(layout.cell_pos)
                     batch_netlist_id = []
                     sub_netlist_feature_idrange = []
