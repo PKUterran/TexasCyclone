@@ -63,6 +63,8 @@ def netlist_from_numpy_directory(
         ('net', 'pinned', 'cell'): (nets, cells),
         ('cell', 'points-to', 'cell'): ([], []),
         ('cell', 'pointed-from', 'cell'): ([], []),
+        ('cell', 'points-to-net', 'net'): ([], []),
+        ('cell', 'pointed-from-net', 'net'): ([], []),
     }, num_nodes_dict={'cell': n_cell, 'net': n_net})
 
     cells_feat = torch.cat([torch.log(cells_size), cells_degree], dim=-1)

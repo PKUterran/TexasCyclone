@@ -20,15 +20,17 @@ def dump_pretrain_data(dir_name: str, save_type=1):
     for nid, sub_netlist in dict_netlist.items():
         layout = layout_from_netlist_ref(sub_netlist)
         fathers, sons = layout.netlist.graph.edges(etype='points-to')
+        fathers_, grandfathers = layout.netlist.graph.edges(etype='pointed-from')
+        assert torch.equal(fathers, fathers_)
         terminal_son_edge_indices = []
-        true_grandfather_indices = layout.netlist.cell_flow.flow_edge_father_indices[
+        true_grandfather_indices = layout.netlist.cell_flow.flow_edge_indices[
                                    len(layout.netlist.terminal_indices):, 0]
         for i in range(len(fathers)):
             if true_grandfather_indices[i] == -1:
                 terminal_son_edge_indices.append(i)
         terminal_son_edge_indices = torch.tensor(terminal_son_edge_indices, dtype=torch.int64)
 
-        grandfathers_pos = layout.cell_pos[layout.netlist.graph.edges['points-to'].data['father_ids'][:, 0], :]
+        grandfathers_pos = layout.cell_pos[grandfathers, :]
         fathers_pos = layout.cell_pos[fathers, :]
         sons_pos = layout.cell_pos[sons, :]
         grandfathers_pos[terminal_son_edge_indices, 0] = layout.netlist.layout_size[0] / 2

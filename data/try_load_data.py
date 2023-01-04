@@ -6,13 +6,13 @@ from data.pretrain import load_pretrain_data
 
 
 if __name__ == '__main__':
-    netlist = netlist_from_numpy_directory('test/dataset1/large', save_type=2)
-    # netlist = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
+    # netlist = netlist_from_numpy_directory('test/dataset1/large-noclu', save_type=2)
+    # # netlist = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
     # print(netlist.original_netlist.graph)
     # print(netlist.graph)
     # print(netlist.cell_prop_dict['ref_pos'])
     # print(netlist.cell_flow.flow_edge_indices)
-
+    #
     # movable_edge_dis = torch.tensor([
     #     650,
     #     500,
@@ -36,8 +36,10 @@ if __name__ == '__main__':
     # print(layout.cell_pos.numpy())
     # print(layout.netlist.cell_prop_dict['ref_pos'].numpy())
     # print(layout.cell_pos.numpy() - layout.netlist.cell_prop_dict['ref_pos'].numpy())
-    # netlist_, dict_nid_dis_deflect = load_pretrain_data('test/dataset1/large', save_type=2)
-    # print(dict_nid_dis_deflect[-1][0])
-    # print(dict_nid_dis_deflect[-1][1] / torch.pi % 2)
-    # print(dict_nid_dis_deflect[4][0])
-    # print(dict_nid_dis_deflect[4][1] / torch.pi % 2)
+    netlist_, dict_nid_dis_deflect = load_pretrain_data('test/dataset1/large', save_type=2)
+    print(netlist_.graph)
+    print(netlist_.dict_sub_netlist[4].graph)
+    print(dict_nid_dis_deflect[-1][0])
+    print(dict_nid_dis_deflect[-1][1] / torch.pi % 2)
+    print(dict_nid_dis_deflect[4][0])
+    print(dict_nid_dis_deflect[4][1] / torch.pi % 2)

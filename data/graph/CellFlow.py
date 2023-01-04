@@ -50,19 +50,13 @@ class CellFlow:
                 dict_cell_net_children.setdefault(f[0], []).append((f[1], i))
 
         flow_edge_indices = []
-        flow_edge_father_index = []
-        flow_edge_net_index = []
-        flow_edge_father_net_index = []
         cell_paths = [[] for _ in range(n_cell)]
         edge_cnt = 0
         edge_stack, temp_path = queue.LifoQueue(), []
 
         ## 4.1 Label the terminals (fixed)
         for t in terminal_indices:
-            flow_edge_indices.append((-1, t))
-            flow_edge_father_index.append(-1)
-            flow_edge_net_index.append(-1)
-            flow_edge_father_net_index.append(-1)
+            flow_edge_indices.append((-1, -1, -1, -1, t))
             edge_cnt += 1
 
         ## 4.2 Find the paths from terminals to movable cells
@@ -78,10 +72,7 @@ class CellFlow:
                 if k[0] == -1:
                     temp_path.append(i)
                 else:
-                    flow_edge_indices.append((k[0], k[2]))
-                    flow_edge_father_index.append(fathers_list[k[0]][0][0])
-                    flow_edge_net_index.append(k[1])
-                    flow_edge_father_net_index.append(fathers_list[k[0]][0][1])
+                    flow_edge_indices.append((fathers_list[k[0]][0][0], fathers_list[k[0]][0][1], k[0], k[1], k[2]))
                     temp_path.append(edge_cnt)
                     edge_cnt += 1
                 cell_paths[k[2]].append(np.array(deepcopy(temp_path)))
@@ -98,10 +89,8 @@ class CellFlow:
         assert len(flow_edge_indices) == edge_cnt
         # self.fathers_list = np.array(fathers_list,dtype=object)
         self.flow_edge_cnt = edge_cnt
+        # cell->net->*cell*->net->cell
         self.flow_edge_indices = np.array(flow_edge_indices)
-        self.flow_edge_net_indices = np.expand_dims(np.array(flow_edge_net_index), -1)
-        self.flow_edge_father_indices = np.expand_dims(np.array(flow_edge_father_index), -1)
-        self.flow_edge_father_net_indices = np.expand_dims(np.array(flow_edge_father_net_index), -1)
         self.cell_paths = np.array(cell_paths, dtype=object)
         """
         这里用numpy.array存储能减少内存开销
@@ -119,8 +108,5 @@ if __name__ == '__main__':
     cell_flow = CellFlow(g, rs)
     # print(cell_flow.fathers_list)
     for _ in range(cell_flow.flow_edge_cnt):
-        print(f'{_}: {cell_flow.flow_edge_indices[_]} '
-              f'thru {cell_flow.flow_edge_net_indices[_]}')
-        print(f'{_}: {cell_flow.flow_edge_father_indices[_]} '
-              f'thru {cell_flow.flow_edge_father_net_indices[_]}')
+        print(f'{_}: {cell_flow.flow_edge_indices[_]}')
     print(cell_flow.cell_paths)

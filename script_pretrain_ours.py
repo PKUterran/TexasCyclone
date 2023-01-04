@@ -13,7 +13,7 @@ train_datasets = [
 ]
 valid_datasets = [
     '../Placement-datasets/dac2012/superblue7',
-    # 'data/test/dataset1/small',
+    # 'data/test/dataset1/large-noclu',
 ]
 test_datasets = [
     '../Placement-datasets/dac2012/superblue9',

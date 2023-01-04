@@ -154,7 +154,8 @@ def pretrain_ours(
                         dis_angle = [batch_dis[nid], batch_angle[nid]]
                         edge_dis_loss = F.mse_loss(torch.log(edge_dis + 1),
                                                    torch.log(dis_angle[0].to(device) + 1))
-                        edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device))
+                        edge_angle_loss = F.mse_loss(edge_angle % (2 * torch.pi),
+                                                     dis_angle[1].to(device) % (2 * torch.pi))
                         loss = sum((
                             edge_dis_loss * 1.0,
                             edge_angle_loss * 1.0,
@@ -234,7 +235,8 @@ def pretrain_ours(
                         dis_angle = [batch_dis[nid], batch_angle[nid]]
                         edge_dis_loss = F.mse_loss(torch.log(edge_dis + 1),
                                                    torch.log(dis_angle[0].to(device) + 1))
-                        edge_angle_loss = F.mse_loss(edge_angle, dis_angle[1].to(device))
+                        edge_angle_loss = F.mse_loss(edge_angle % (2 * torch.pi),
+                                                     dis_angle[1].to(device) % (2 * torch.pi))
                         loss = sum((
                             edge_dis_loss * 1.0,
                             edge_angle_loss * 0.1,
