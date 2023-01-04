@@ -5,6 +5,7 @@ import torch.sparse as sparse
 import pickle
 import dgl
 import tqdm
+from time import time
 from typing import Dict, List, Tuple, Optional
 
 from pympler import asizeof
