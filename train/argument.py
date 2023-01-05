@@ -44,7 +44,7 @@ def parse_train_args() -> argparse.Namespace:
         help='hidden dim of pin features'
     )
     args_parser.add_argument(
-        '--pass_type', type=str, default='single',
+        '--pass_type', type=str, default='bidirection',
         help='use single or bidirection message passage'
     )
 
@@ -155,8 +155,8 @@ def parse_pretrain_args() -> argparse.Namespace:
         help='hidden dim of pin features'
     )
     args_parser.add_argument(
-        '--pass_type', type=str, default='single',
-        help='hidden dim of pin features'
+        '--pass_type', type=str, default='bidirection',
+        help='use single or bidirection message passage'
     )
 
     # Training settings
