@@ -58,7 +58,7 @@ def netlist_from_numpy_directory(
         cells_pos_up_corner = cells_ref_pos + cells_size / 2
         layout_size = tuple(map(float, torch.max(cells_pos_up_corner[cells_type[:, 0] > 0.5], dim=0)[0]))
 
-    graph = dgl.heterograph({
+    graph: dgl.DGLHeteroGraph = dgl.heterograph({
         ('cell', 'pins', 'net'): (cells, nets),
         ('net', 'pinned', 'cell'): (nets, cells),
         ('cell', 'points-to', 'cell'): ([], []),
@@ -71,22 +71,17 @@ def netlist_from_numpy_directory(
     nets_feat = torch.cat([nets_degree], dim=-1)
     pins_feat = torch.cat([pins_pos / 1000, pins_io], dim=-1)
 
-    cell_prop_dict = {
-        'ref_pos': cells_ref_pos,
-        'pos': cells_pos,
-        'size': cells_size,
-        'feat': cells_feat,
-        'type': cells_type,
-    }
-    net_prop_dict = {
-        'degree': nets_degree,
-        'feat': nets_feat,
-    }
-    pin_prop_dict = {
-        'pos': pins_pos,
-        'io': pins_io,
-        'feat': pins_feat,
-    }
+    graph.nodes['cell'].data['ref_pos'] = cells_ref_pos
+    graph.nodes['cell'].data['pos'] = cells_pos
+    graph.nodes['cell'].data['size'] = cells_size
+    graph.nodes['cell'].data['feat'] = cells_feat
+    graph.nodes['cell'].data['type'] = cells_type
+    graph.nodes['net'].data['degree'] = nets_degree
+    graph.nodes['net'].data['feat'] = nets_feat
+    graph.edges['pinned'].data['pos'] = pins_pos
+    graph.edges['pinned'].data['io'] = pins_io
+    graph.edges['pinned'].data['feat'] = pins_feat
+
     # for k, v in cell_prop_dict.items():
     #     print(f'{k}: {v.shape}')
     # for k, v in net_prop_dict.items():
@@ -96,17 +91,11 @@ def netlist_from_numpy_directory(
 
     netlist = Netlist(
         graph=graph,
-        cell_prop_dict=cell_prop_dict,
-        net_prop_dict=net_prop_dict,
-        pin_prop_dict=pin_prop_dict,
         layout_size=layout_size,
         hierarchical=cell_clusters is not None and len(cell_clusters),
         cell_clusters=cell_clusters,
         original_netlist=Netlist(
             graph=deepcopy(graph),
-            cell_prop_dict=deepcopy(cell_prop_dict),
-            net_prop_dict=deepcopy(net_prop_dict),
-            pin_prop_dict=deepcopy(pin_prop_dict),
             layout_size=layout_size, simple=True
         )
     )
@@ -144,7 +133,7 @@ def layout_from_netlist_ref(netlist: Netlist) -> Layout:
 
 
 if __name__ == '__main__':
-    netlist_ = netlist_from_numpy_directory('test/dataset1/large-noclu', save_type=2)
+    netlist_ = netlist_from_numpy_directory('test/dataset1/large', save_type=2)
     # netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
     print(netlist_.original_netlist.graph)
     print(netlist_.graph)

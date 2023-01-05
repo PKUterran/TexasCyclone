@@ -23,9 +23,6 @@ from data.graph.utils import pad_net_cell_list
 class Netlist:
     def __init__(
             self, graph: dgl.DGLHeteroGraph,
-            cell_prop_dict: Dict[str, torch.Tensor],
-            net_prop_dict: Dict[str, torch.Tensor],
-            pin_prop_dict: Dict[str, torch.Tensor],
             layout_size: Optional[Tuple[float, float]] = None,
             hierarchical: bool = False,
             cell_clusters: Optional[List[List[int]]] = None,
@@ -34,9 +31,6 @@ class Netlist:
         #######################################################
         # main properties
         self.graph = graph
-        self.cell_prop_dict = cell_prop_dict
-        self.net_prop_dict = net_prop_dict
-        self.pin_prop_dict = pin_prop_dict
         self.original_netlist = original_netlist
         self.dict_sub_netlist: Dict[int, Netlist] = {}
 
@@ -58,7 +52,7 @@ class Netlist:
         #######################################################
         # adapt terminals
         self.terminal_indices = list(map(lambda x: int(x),
-                                         torch.argwhere(self.cell_prop_dict['type'][:, 0] > 0).view(-1)))
+                                         torch.argwhere(self.graph.nodes['cell'].data['type'][:, 0] > 0).view(-1)))
         if len(self.terminal_indices) == 0:
             self.adapt_terminals()
             assert len(self.terminal_indices) > 0
@@ -74,7 +68,7 @@ class Netlist:
         self._path_cell_matrix = None
         self._path_edge_matrix = None
         self._edge_ends_path_indices = None
-        self.terminal_edge_rel_pos = self.cell_prop_dict['pos'][self.terminal_indices, :] - torch.tensor(
+        self.terminal_edge_rel_pos = self.graph.nodes['cell'].data['pos'][self.terminal_indices, :] - torch.tensor(
             self.layout_size, dtype=torch.float32) / 2
         self.terminal_edge_theta_rev = torch.arctan2(self.terminal_edge_rel_pos[:, 1],
                                                      self.terminal_edge_rel_pos[:, 0]) + torch.pi
@@ -97,9 +91,6 @@ class Netlist:
             print('\t\tgraph size:', asizeof.asizeof(self.graph) / 2 ** 20)
             print('\t\toriginal_netlist size:', asizeof.asizeof(self.original_netlist) / 2 ** 20)
             print('\t\tdict_sub_netlist size:', asizeof.asizeof(self.dict_sub_netlist) / 2 ** 20)
-            print('\t\tcell_prop_dict size:', asizeof.asizeof(self.cell_prop_dict) / 2 ** 20)
-            print('\t\tnet_prop_dict size:', asizeof.asizeof(self.net_prop_dict) / 2 ** 20)
-            print('\t\tpin_prop_dict size:', asizeof.asizeof(self.pin_prop_dict) / 2 ** 20)
             print('\t\tcell_flow size:', asizeof.asizeof(self.cell_flow) / 2 ** 20)
             print('\t\tcell_path_edge_matrix size:', asizeof.asizeof(self.cell_path_edge_matrix) / 2 ** 20)
             print('\t\tpath_cell_matrix size:', asizeof.asizeof(self.path_cell_matrix) / 2 ** 20)
@@ -156,10 +147,6 @@ class Netlist:
 
         temp_n_cell = self.graph.num_nodes(ntype='cell')
         parted_cells = set()
-        pseudo_cell_ref_pos = []
-        pseudo_cell_size = []
-        pseudo_cell_degree = []
-        len_pseudo_pin_pos = 0
 
         iter_partition_list = tqdm.tqdm(cell_clusters, total=len(cell_clusters)) if use_tqdm else cell_clusters
         ###########
@@ -177,90 +164,47 @@ class Netlist:
                 continue
             sub_graph_net_degree_dict_list[sub_graph_id].setdefault(int(net_id),0)
             sub_graph_net_degree_dict_list[sub_graph_id][int(net_id)] += 1
-        ###########
+
         for i, partition in enumerate(iter_partition_list):
             if len(partition) <= 1:
                 continue
             partition_set = set(partition)
             parted_cells |= partition_set
-            #################
-            # new_net_degree_dict = {}
-            # for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):
-            #     if cell_id in partition_set:
-            #         new_net_degree_dict.setdefault(net_id, 0)
-            #         new_net_degree_dict[net_id] += 1
+
             new_net_degree_dict = sub_graph_net_degree_dict_list[i]
-            ######################
             keep_nets_id = np.array(list(new_net_degree_dict.keys()))
             keep_nets_degree = np.array(list(new_net_degree_dict.values()))
-            good_nets = np.abs(self.net_prop_dict['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
+            good_nets = np.abs(self.graph.nodes['net'].data['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
             good_nets_id = torch.tensor(keep_nets_id)[good_nets]  # numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
             sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id})
-            sub_netlist = Netlist(
-                graph=sub_graph,
-                cell_prop_dict={k: v[sub_graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()},
-                net_prop_dict={k: v[sub_graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()},
-                pin_prop_dict={k: v[sub_graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()},
-            )
-            ######################
+            sub_netlist = Netlist(graph=sub_graph)
 
-            # netlist_size = asizeof.asizeof(sub_netlist) / 1024 / 1024
-            # cell_flow_size = asizeof.asizeof(sub_netlist._cell_flow) / 1024 / 1024
-            # cell_proc_dict_size = asizeof.asizeof(sub_netlist.cell_prop_dict) / 1024 / 1024
-            # flow_edge_indices_size = asizeof.asizeof(sub_netlist._cell_flow.flow_edge_indices) / 1024 / 1024
-            # cell_paths_size = asizeof.asizeof(sub_netlist._cell_flow.cell_paths) / 1024 / 1024
-            # print(f"netlist {i} cell flow size is {cell_flow_size} MB account for {cell_flow_size / netlist_size}%")
-            # print(f"netlist {i} cell proc dict size is {cell_proc_dict_size} MB account for {cell_proc_dict_size / netlist_size}%")
-            # print(f"netlist {i} flow edge size is {flow_edge_indices_size} MB account for {flow_edge_indices_size / netlist_size}%")
-            # print(f"netlist {i} cell path size is {cell_paths_size} MB account for {cell_paths_size / netlist_size}%")
-            # print(f"netlist {i} size is {asizeof.asizeof(sub_netlist) / 1024 / 1024} MB has {len(partition)} node")
-            # dict_sub_netlist_size = asizeof.asizeof(self.dict_sub_netlist) / 1024 / 1024
-            # total_mem_use = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
-            # print(f"sub netlist size is {dict_sub_netlist_size} MB account for {dict_sub_netlist_size / total_mem_use} total")
-            # print(f"total mem use {total_mem_use} MB")
-            #####################
-            self.dict_sub_netlist[temp_n_cell] = sub_netlist
-            self.graph.add_nodes(1, ntype='cell')
-            self.graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned')
-            self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
-            ref_pos = torch.mean(sub_netlist.cell_prop_dict['ref_pos'], dim=0)
-            sub_netlist.cell_prop_dict['ref_pos'] -= \
+            ref_pos = torch.mean(sub_netlist.graph.nodes['cell'].data['ref_pos'], dim=0)
+            sub_netlist.graph.nodes['cell'].data['ref_pos'] -= \
                 ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32) / 2
-            #################
-            '''
-            这个地方感觉append可能会慢所以修改了一下实现
-            '''
-            # pseudo_cell_ref_pos.append(ref_pos)
-            pseudo_cell_size.append(sub_netlist.layout_size)
-            pseudo_cell_degree.append(len(keep_nets_id) - len(good_nets_id))
-            # pseudo_pin_pos.extend([[0, 0] for _ in range(len(keep_nets_id))])
-            if len(pseudo_cell_ref_pos) == 0:
-                pseudo_cell_ref_pos = ref_pos
-            else:
-                pseudo_cell_ref_pos = torch.vstack([pseudo_cell_ref_pos, ref_pos])
-            len_pseudo_pin_pos += len(keep_nets_id)
-            #######################
+            pseudo_cell_ref_pos = ref_pos.unsqueeze(dim=0)
+            pseudo_cell_pos = torch.full_like(pseudo_cell_ref_pos, fill_value=torch.nan)
+            pseudo_cell_size = torch.tensor(sub_netlist.layout_size, dtype=torch.float32).unsqueeze(dim=0)
+            pseudo_cell_degree = torch.tensor([[len(keep_nets_id) - len(good_nets_id)]], dtype=torch.float32)
+            pseudo_cell_feat = torch.cat([torch.log(pseudo_cell_size), pseudo_cell_degree], dim=-1)
+            pseudo_pin_pos = torch.zeros([len(keep_nets_id), 2], dtype=torch.float32)
+            pseudo_pin_io = torch.full(size=[len(keep_nets_id), 1], fill_value=2, dtype=torch.float32)
             temp_n_cell += 1
 
-        #################
-        # pseudo_cell_ref_pos = torch.vstack(pseudo_cell_ref_pos)
-        pseudo_cell_size = torch.tensor(pseudo_cell_size, dtype=torch.float32)
-        pseudo_cell_pos = torch.full_like(pseudo_cell_size, fill_value=torch.nan)
-        ######################
-        pseudo_cell_degree = torch.tensor(pseudo_cell_degree, dtype=torch.float32).unsqueeze(-1)
-        pseudo_cell_feat = torch.cat([torch.log(pseudo_cell_size), pseudo_cell_degree], dim=-1)
-        self.cell_prop_dict['ref_pos'] = torch.vstack([self.cell_prop_dict['ref_pos'], pseudo_cell_ref_pos])
-        self.cell_prop_dict['size'] = torch.vstack([self.cell_prop_dict['size'], pseudo_cell_size])
-        self.cell_prop_dict['pos'] = torch.vstack([self.cell_prop_dict['pos'], pseudo_cell_pos])
-        self.cell_prop_dict['feat'] = torch.vstack([self.cell_prop_dict['feat'], pseudo_cell_feat])
-        self.cell_prop_dict['type'] = torch.vstack([self.cell_prop_dict['type'], torch.zeros_like(pseudo_cell_degree)])
-
-        pseudo_pin_pos = torch.zeros([len_pseudo_pin_pos, 2])
-        pseudo_pin_io = torch.full(size=[pseudo_pin_pos.shape[0], 1], fill_value=2)
-        pseudo_pin_feat = torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1)
-        self.pin_prop_dict['pos'] = torch.vstack([self.pin_prop_dict['pos'], pseudo_pin_pos])
-        self.pin_prop_dict['io'] = torch.vstack([self.pin_prop_dict['io'], pseudo_pin_io])
-        self.pin_prop_dict['feat'] = torch.vstack([self.pin_prop_dict['feat'], pseudo_pin_feat])
+            self.dict_sub_netlist[temp_n_cell - 1] = sub_netlist
+            self.graph.add_nodes(1, ntype='cell', data={
+                'ref_pos': pseudo_cell_ref_pos,
+                'pos': pseudo_cell_pos,
+                'size': pseudo_cell_size,
+                'feat': pseudo_cell_feat,
+                'type': torch.zeros_like(pseudo_cell_degree),
+            })
+            self.graph.add_edges(keep_nets_id, [temp_n_cell - 1] * len(keep_nets_id), etype='pinned', data={
+                'pos': pseudo_pin_pos,
+                'io': pseudo_pin_io,
+                'feat': torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1),
+            })
+            self.graph.add_edges([temp_n_cell - 1] * len(keep_nets_id), keep_nets_id, etype='pins')
 
         left_cells = set(range(temp_n_cell)) - parted_cells
         left_nets = set()
@@ -268,23 +212,23 @@ class Netlist:
             if cell_id in left_cells:
                 left_nets.add(net_id)
         self.graph = dgl.node_subgraph(self.graph, nodes={'cell': list(left_cells), 'net': list(left_nets)})
-        self.cell_prop_dict = {k: v[self.graph.nodes['cell'].data[dgl.NID], :] for k, v in self.cell_prop_dict.items()}
-        self.net_prop_dict = {k: v[self.graph.nodes['net'].data[dgl.NID], :] for k, v in self.net_prop_dict.items()}
-        self.pin_prop_dict = {k: v[self.graph.edges['pinned'].data[dgl.EID], :] for k, v in self.pin_prop_dict.items()}
         dict_reverse_nid = {int(idx): i for i, idx in enumerate(self.graph.nodes['cell'].data[dgl.NID])}
+        print(dict_reverse_nid)
+        print(self.dict_sub_netlist)
         self.dict_sub_netlist = {dict_reverse_nid[k]: v for k, v in self.dict_sub_netlist.items()}
 
     def adapt_layout_size(self):
         # TODO: better layout adaption
-        cells_size = self.cell_prop_dict['size']
+        cells_size = self.graph.nodes['cell'].data['size']
         span = (cells_size[:, 0] * cells_size[:, 1]).sum() * 5
         self.layout_size = (span ** 0.5, span ** 0.5)
 
     def adapt_terminals(self):
         # TODO: better terminal selection
-        biggest_cell_id = int(torch.argmax(torch.sum(self.cell_prop_dict['size'], dim=-1)))
+        biggest_cell_id = int(torch.argmax(torch.sum(self.graph.nodes['cell'].data['size'], dim=-1)))
         self.terminal_indices = [biggest_cell_id]
-        self.cell_prop_dict['pos'][biggest_cell_id, :] = self.cell_prop_dict['size'][biggest_cell_id, :] / 2
+        self.graph.nodes['cell'].data['pos'][biggest_cell_id, :] = \
+            self.graph.nodes['cell'].data['size'][biggest_cell_id, :] / 2
 
     def construct_cell_flow(self):
         self._cell_flow = CellFlow(self.graph, self.terminal_indices)
