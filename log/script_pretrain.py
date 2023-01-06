@@ -37,6 +37,7 @@ def tendency() -> Tuple[int, Dict[str, Any]]:
 
 TUPLES = [
     ('default', 'pretrain/pre-default'),
+    ('lr5', 'pretrain/pre-lr5'),
 ]
 
 

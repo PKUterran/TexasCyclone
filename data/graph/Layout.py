@@ -22,7 +22,7 @@ class Layout:
 
     @property
     def cell_size(self) -> torch.Tensor:
-        return self.netlist.cell_prop_dict['size']
+        return self.netlist.graph.nodes['cell'].data['size']
         
     @property
     def cell_pos(self) -> Optional[torch.Tensor]:

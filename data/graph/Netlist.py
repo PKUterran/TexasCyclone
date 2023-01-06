@@ -189,9 +189,9 @@ class Netlist:
             pseudo_cell_feat = torch.cat([torch.log(pseudo_cell_size), pseudo_cell_degree], dim=-1)
             pseudo_pin_pos = torch.zeros([len(keep_nets_id), 2], dtype=torch.float32)
             pseudo_pin_io = torch.full(size=[len(keep_nets_id), 1], fill_value=2, dtype=torch.float32)
-            temp_n_cell += 1
+            pseudo_pin_feat = torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1)
 
-            self.dict_sub_netlist[temp_n_cell - 1] = sub_netlist
+            self.dict_sub_netlist[temp_n_cell] = sub_netlist
             self.graph.add_nodes(1, ntype='cell', data={
                 'ref_pos': pseudo_cell_ref_pos,
                 'pos': pseudo_cell_pos,
@@ -199,12 +199,13 @@ class Netlist:
                 'feat': pseudo_cell_feat,
                 'type': torch.zeros_like(pseudo_cell_degree),
             })
-            self.graph.add_edges(keep_nets_id, [temp_n_cell - 1] * len(keep_nets_id), etype='pinned', data={
+            self.graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned', data={
                 'pos': pseudo_pin_pos,
                 'io': pseudo_pin_io,
-                'feat': torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1),
+                'feat': pseudo_pin_feat,
             })
-            self.graph.add_edges([temp_n_cell - 1] * len(keep_nets_id), keep_nets_id, etype='pins')
+            self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
+            temp_n_cell += 1
 
         left_cells = set(range(temp_n_cell)) - parted_cells
         left_nets = set()

@@ -61,9 +61,9 @@ def pretrain_ours(
     print(f'Building model...')
     sample_netlist = train_list_netlist_dis_angle[0][0] \
         if train_list_netlist_dis_angle else test_list_netlist_dis_angle[0][0]
-    raw_cell_feats = sample_netlist.cell_prop_dict['feat'].shape[1]
-    raw_net_feats = sample_netlist.net_prop_dict['feat'].shape[1]
-    raw_pin_feats = sample_netlist.pin_prop_dict['feat'].shape[1]
+    raw_cell_feats = sample_netlist.graph.nodes['cell'].data['feat'].shape[1]
+    raw_net_feats = sample_netlist.graph.nodes['net'].data['feat'].shape[1]
+    raw_pin_feats = sample_netlist.graph.edges['pinned'].data['feat'].shape[1]
     config = {
         'DEVICE': device,
         'CELL_FEATS': args.cell_feats,
@@ -133,12 +133,12 @@ def pretrain_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.cell_prop_dict['feat'])
-                batch_net_feature.append(netlist.net_prop_dict['feat'])
-                batch_pin_feature.append(netlist.pin_prop_dict['feat'])
+                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
+                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
+                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
-                batch_cell_size.append(netlist.cell_prop_dict['size'])
+                batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if cnt_graph > 128 or j == n_netlist - 1:
                     batch_cell_feature = torch.vstack(batch_cell_feature)
                     batch_net_feature = torch.vstack(batch_net_feature)
@@ -210,12 +210,12 @@ def pretrain_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.cell_prop_dict['feat'])
-                batch_net_feature.append(netlist.net_prop_dict['feat'])
-                batch_pin_feature.append(netlist.pin_prop_dict['feat'])
+                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
+                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
+                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
-                batch_cell_size.append(netlist.cell_prop_dict['size'])
+                batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if total_batch_nodes_num > 10000 or j == n_netlist - 1:
                     batch_cell_feature = torch.vstack(batch_cell_feature)
                     batch_net_feature = torch.vstack(batch_net_feature)

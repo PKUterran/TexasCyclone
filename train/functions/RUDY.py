@@ -13,7 +13,7 @@ class RUDYMetric(MetricFunction):
 
     def calculate(self, layout: Layout, *args, **kwargs) -> float:
         net_span = np.array(layout.net_span.cpu().clone().detach(), dtype=np.float32)
-        net_degree = np.array(layout.netlist.net_prop_dict['degree'], dtype=np.float32)
+        net_degree = np.array(layout.netlist.graph.nodes['net'].data['degree'], dtype=np.float32)
         layout_size = layout.netlist.layout_size
         shape = (int(layout_size[0] / self.w) + 1, int(layout_size[1] / self.h) + 1)
         cong_map = np.zeros(shape=shape, dtype=np.float32)

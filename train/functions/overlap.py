@@ -37,7 +37,7 @@ def macro_sample(layout: Layout, max_cap) -> Tuple[List[int], List[int]]:
 
 
 def calc_overlap_xy(layout: Layout, sample_i: List[int], sample_j: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
-    cell_size = layout.netlist.cell_prop_dict['size'].to(layout.cell_pos.device)
+    cell_size = layout.netlist.graph.nodes['cell'].data['size'].to(layout.cell_pos.device)
     cell_pos = layout.cell_pos
     sample_cell_size_i = cell_size[sample_i, :]
     sample_cell_size_j = cell_size[sample_j, :]

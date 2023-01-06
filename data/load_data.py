@@ -129,7 +129,7 @@ def layout_from_netlist_cell_pos(netlist: Netlist, cell_pos: torch.Tensor):
 
 
 def layout_from_netlist_ref(netlist: Netlist) -> Layout:
-    return Layout(netlist, netlist.cell_prop_dict['ref_pos'])
+    return Layout(netlist, netlist.graph.nodes['cell'].data['ref_pos'])
 
 
 if __name__ == '__main__':
