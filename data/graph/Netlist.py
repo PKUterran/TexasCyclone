@@ -26,11 +26,12 @@ class Netlist:
             layout_size: Optional[Tuple[float, float]] = None,
             hierarchical: bool = False,
             cell_clusters: Optional[List[List[int]]] = None,
-            original_netlist=None, simple=False,
+            original_netlist=None, simple=False, temp_device='cuda:0'
     ):
         #######################################################
         # main properties
-        self.graph = graph
+        self.device = torch.device(temp_device)
+        self.graph = graph.to(self.device)
         self.original_netlist = original_netlist
         self.dict_sub_netlist: Dict[int, Netlist] = {}
 
@@ -68,8 +69,8 @@ class Netlist:
         self._path_cell_matrix = None
         self._path_edge_matrix = None
         self._edge_ends_path_indices = None
-        self.terminal_edge_rel_pos = self.graph.nodes['cell'].data['pos'][self.terminal_indices, :] - torch.tensor(
-            self.layout_size, dtype=torch.float32) / 2
+        self.terminal_edge_rel_pos = self.graph.nodes['cell'].data['pos'][self.terminal_indices, :].to(
+            'cpu') - torch.tensor(self.layout_size, dtype=torch.float32) / 2
         self.terminal_edge_theta_rev = torch.arctan2(self.terminal_edge_rel_pos[:, 1],
                                                      self.terminal_edge_rel_pos[:, 0]) + torch.pi
         self.n_flow_edge = len(self.cell_flow.flow_edge_indices)
@@ -148,23 +149,19 @@ class Netlist:
         temp_n_cell = self.graph.num_nodes(ntype='cell')
         parted_cells = set()
 
-        iter_partition_list = tqdm.tqdm(cell_clusters, total=len(cell_clusters)) if use_tqdm else cell_clusters
-        ###########
-        '''
-        提前预处理每个子图中的net
-        '''
         sub_graph_net_degree_dict_list = [dict() for _ in range(len(cell_clusters))]
         belong_node = np.ones(temp_n_cell) * -1
-        for i,sub_graph_list in enumerate(cell_clusters):
+        for i, sub_graph_list in enumerate(cell_clusters):
             for node in sub_graph_list:
                 belong_node[int(node)] = i
         for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):
             sub_graph_id = int(belong_node[int(cell_id)])
             if sub_graph_id == -1:
                 continue
-            sub_graph_net_degree_dict_list[sub_graph_id].setdefault(int(net_id),0)
+            sub_graph_net_degree_dict_list[sub_graph_id].setdefault(int(net_id), 0)
             sub_graph_net_degree_dict_list[sub_graph_id][int(net_id)] += 1
 
+        iter_partition_list = tqdm.tqdm(cell_clusters, total=len(cell_clusters)) if use_tqdm else cell_clusters
         for i, partition in enumerate(iter_partition_list):
             if len(partition) <= 1:
                 continue
@@ -172,23 +169,27 @@ class Netlist:
             parted_cells |= partition_set
 
             new_net_degree_dict = sub_graph_net_degree_dict_list[i]
-            keep_nets_id = np.array(list(new_net_degree_dict.keys()))
-            keep_nets_degree = np.array(list(new_net_degree_dict.values()))
-            good_nets = np.abs(self.graph.nodes['net'].data['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
-            good_nets_id = torch.tensor(keep_nets_id)[good_nets]  # numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
-            sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id})
+            keep_nets_id = torch.tensor(list(new_net_degree_dict.keys()), dtype=torch.int64, device=self.device)
+            keep_nets_degree = torch.tensor(list(new_net_degree_dict.values()), dtype=torch.int64, device=self.device)
+            good_nets = torch.abs(self.graph.nodes['net'].data['degree'][keep_nets_id, 0] - keep_nets_degree) < 1e-5
+            good_nets_id = keep_nets_id[good_nets]  # numpy似乎不支持用TRUE FALSE来筛选数据所以换成tensor
+            sub_graph = dgl.node_subgraph(self.graph, nodes={'cell': partition, 'net': keep_nets_id},
+                                          output_device=self.device)
             sub_netlist = Netlist(graph=sub_graph)
 
             ref_pos = torch.mean(sub_netlist.graph.nodes['cell'].data['ref_pos'], dim=0)
             sub_netlist.graph.nodes['cell'].data['ref_pos'] -= \
-                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32) / 2
+                ref_pos - torch.tensor(sub_netlist.layout_size, dtype=torch.float32, device=self.device) / 2
             pseudo_cell_ref_pos = ref_pos.unsqueeze(dim=0)
             pseudo_cell_pos = torch.full_like(pseudo_cell_ref_pos, fill_value=torch.nan)
-            pseudo_cell_size = torch.tensor(sub_netlist.layout_size, dtype=torch.float32).unsqueeze(dim=0)
-            pseudo_cell_degree = torch.tensor([[len(keep_nets_id) - len(good_nets_id)]], dtype=torch.float32)
+            pseudo_cell_size = torch.tensor(sub_netlist.layout_size,
+                                            dtype=torch.float32, device=self.device).unsqueeze(dim=0)
+            pseudo_cell_degree = torch.tensor([[len(keep_nets_id) - len(good_nets_id)]],
+                                              dtype=torch.float32, device=self.device)
             pseudo_cell_feat = torch.cat([torch.log(pseudo_cell_size), pseudo_cell_degree], dim=-1)
-            pseudo_pin_pos = torch.zeros([len(keep_nets_id), 2], dtype=torch.float32)
-            pseudo_pin_io = torch.full(size=[len(keep_nets_id), 1], fill_value=2, dtype=torch.float32)
+            pseudo_pin_pos = torch.zeros([len(keep_nets_id), 2], dtype=torch.float32, device=self.device)
+            pseudo_pin_io = torch.full(size=[len(keep_nets_id), 1], fill_value=2,
+                                       dtype=torch.float32, device=self.device)
             pseudo_pin_feat = torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1)
 
             self.dict_sub_netlist[temp_n_cell] = sub_netlist
@@ -206,6 +207,7 @@ class Netlist:
             })
             self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
             temp_n_cell += 1
+            sub_netlist.graph = sub_netlist.graph.cpu()
 
         left_cells = set(range(temp_n_cell)) - parted_cells
         left_nets = set()
@@ -213,9 +215,8 @@ class Netlist:
             if cell_id in left_cells:
                 left_nets.add(net_id)
         self.graph = dgl.node_subgraph(self.graph, nodes={'cell': list(left_cells), 'net': list(left_nets)})
+        self.graph = self.graph.to('cpu')
         dict_reverse_nid = {int(idx): i for i, idx in enumerate(self.graph.nodes['cell'].data[dgl.NID])}
-        print(dict_reverse_nid)
-        print(self.dict_sub_netlist)
         self.dict_sub_netlist = {dict_reverse_nid[k]: v for k, v in self.dict_sub_netlist.items()}
 
     def adapt_layout_size(self):

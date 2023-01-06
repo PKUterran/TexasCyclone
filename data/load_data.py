@@ -82,17 +82,10 @@ def netlist_from_numpy_directory(
     graph.edges['pinned'].data['io'] = pins_io
     graph.edges['pinned'].data['feat'] = pins_feat
 
-    # for k, v in cell_prop_dict.items():
-    #     print(f'{k}: {v.shape}')
-    # for k, v in net_prop_dict.items():
-    #     print(f'{k}: {v.shape}')
-    # for k, v in pin_prop_dict.items():
-    #     print(f'{k}: {v.shape}')
-
     netlist = Netlist(
         graph=graph,
         layout_size=layout_size,
-        hierarchical=cell_clusters is not None and len(cell_clusters),
+        hierarchical=use_hierarchical and cell_clusters is not None and len(cell_clusters),
         cell_clusters=cell_clusters,
         original_netlist=Netlist(
             graph=deepcopy(graph),
@@ -110,7 +103,7 @@ def layout_from_netlist_dis_deflect(
         movable_edge_dis: torch.Tensor, movable_edge_deflect: torch.Tensor,
 ) -> Tuple[Layout, torch.Tensor]:
     device = movable_edge_dis.device
-    edge_deflect = torch.cat([netlist.terminal_edge_theta_rev, movable_edge_deflect])
+    edge_deflect = torch.cat([netlist.terminal_edge_theta_rev.to(device), movable_edge_deflect])
     path_angle = netlist.path_edge_matrix.to(device) @ edge_deflect
     edge_angle = path_angle[netlist.edge_ends_path_indices.to(device)]
     movable_edge_angle = edge_angle[len(netlist.terminal_indices):]
