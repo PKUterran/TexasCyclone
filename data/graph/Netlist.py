@@ -161,6 +161,16 @@ class Netlist:
             sub_graph_net_degree_dict_list[sub_graph_id].setdefault(int(net_id), 0)
             sub_graph_net_degree_dict_list[sub_graph_id][int(net_id)] += 1
 
+        all_pseudo_cell_cnt = 0
+        all_pseudo_cell_ref_pos = torch.zeros(size=[0, 2], dtype=torch.float32, device=self.device)
+        all_pseudo_cell_pos = torch.zeros(size=[0, 2], dtype=torch.float32, device=self.device)
+        all_pseudo_cell_size = torch.zeros(size=[0, 2], dtype=torch.float32, device=self.device)
+        all_pseudo_cell_feat = None
+        all_pseudo_pin_cell = torch.zeros(size=[0], dtype=torch.int64, device=self.device)
+        all_pseudo_pin_net = torch.zeros(size=[0], dtype=torch.int64, device=self.device)
+        all_pseudo_pin_pos = torch.zeros(size=[0, 2], dtype=torch.float32, device=self.device)
+        all_pseudo_pin_io = torch.zeros(size=[0, 1], dtype=torch.float32, device=self.device)
+        all_pseudo_pin_feat = None
         iter_partition_list = tqdm.tqdm(cell_clusters, total=len(cell_clusters)) if use_tqdm else cell_clusters
         for i, partition in enumerate(iter_partition_list):
             if len(partition) <= 1:
@@ -192,23 +202,43 @@ class Netlist:
                                        dtype=torch.float32, device=self.device)
             pseudo_pin_feat = torch.cat([pseudo_pin_pos / 1000, pseudo_pin_io], dim=-1)
 
+            all_pseudo_cell_cnt += 1
+            all_pseudo_cell_ref_pos = torch.vstack([all_pseudo_cell_ref_pos, pseudo_cell_ref_pos])
+            all_pseudo_cell_pos = torch.vstack([all_pseudo_cell_pos, pseudo_cell_pos])
+            all_pseudo_cell_size = torch.vstack([all_pseudo_cell_size, pseudo_cell_size])
+            if all_pseudo_cell_feat is None:
+                all_pseudo_cell_feat = pseudo_cell_feat
+            else:
+                all_pseudo_cell_feat = torch.vstack([all_pseudo_cell_feat, pseudo_cell_feat])
+            all_pseudo_pin_cell = torch.cat([
+                all_pseudo_pin_cell,
+                torch.full(size=[len(keep_nets_id)], fill_value=temp_n_cell, dtype=torch.int64, device=self.device)
+            ])
+            all_pseudo_pin_net = torch.cat([all_pseudo_pin_net, keep_nets_id])
+            all_pseudo_pin_pos = torch.vstack([all_pseudo_pin_pos, pseudo_pin_pos])
+            all_pseudo_pin_io = torch.vstack([all_pseudo_pin_io, pseudo_pin_io])
+            if all_pseudo_pin_feat is None:
+                all_pseudo_pin_feat = pseudo_pin_feat
+            else:
+                all_pseudo_pin_feat = torch.vstack([all_pseudo_pin_feat, pseudo_pin_feat])
+
             self.dict_sub_netlist[temp_n_cell] = sub_netlist
-            self.graph.add_nodes(1, ntype='cell', data={
-                'ref_pos': pseudo_cell_ref_pos,
-                'pos': pseudo_cell_pos,
-                'size': pseudo_cell_size,
-                'feat': pseudo_cell_feat,
-                'type': torch.zeros_like(pseudo_cell_degree),
-            })
-            self.graph.add_edges(keep_nets_id, [temp_n_cell] * len(keep_nets_id), etype='pinned', data={
-                'pos': pseudo_pin_pos,
-                'io': pseudo_pin_io,
-                'feat': pseudo_pin_feat,
-            })
-            self.graph.add_edges([temp_n_cell] * len(keep_nets_id), keep_nets_id, etype='pins')
             temp_n_cell += 1
             sub_netlist.graph = sub_netlist.graph.cpu()
 
+        self.graph.add_nodes(all_pseudo_cell_cnt, ntype='cell', data={
+            'ref_pos': all_pseudo_cell_ref_pos,
+            'pos': all_pseudo_cell_pos,
+            'size': all_pseudo_cell_size,
+            'feat': all_pseudo_cell_feat,
+            'type': torch.zeros(size=[all_pseudo_cell_cnt, 1], dtype=torch.float32, device=self.device),
+        })
+        self.graph.add_edges(all_pseudo_pin_net, all_pseudo_pin_cell, etype='pinned', data={
+            'pos': all_pseudo_pin_pos,
+            'io': all_pseudo_pin_io,
+            'feat': all_pseudo_pin_feat,
+        })
+        self.graph.add_edges(all_pseudo_pin_cell, all_pseudo_pin_net, etype='pins')
         left_cells = set(range(temp_n_cell)) - parted_cells
         left_nets = set()
         for net_id, cell_id in zip(*[ns.tolist() for ns in self.graph.edges(etype='pinned')]):

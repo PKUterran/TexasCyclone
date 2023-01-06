@@ -39,6 +39,8 @@ if __name__ == '__main__':
     # netlist_, dict_nid_dis_deflect = load_pretrain_data('test/dataset1/large', save_type=2)
     # print(netlist_.graph)
     # print(netlist_.dict_sub_netlist[4].graph)
+    # print(netlist_.graph.nodes['cell'].data)
+    # print(netlist_.dict_sub_netlist[4].graph.nodes['cell'].data)
     # print(dict_nid_dis_deflect[-1][0])
     # print(dict_nid_dis_deflect[-1][1] / torch.pi % 2)
     # print(dict_nid_dis_deflect[4][0])
