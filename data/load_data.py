@@ -126,8 +126,8 @@ def layout_from_netlist_ref(netlist: Netlist) -> Layout:
 
 
 if __name__ == '__main__':
-    netlist_ = netlist_from_numpy_directory('test/dataset1/large', save_type=2)
-    # netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
+    # netlist_ = netlist_from_numpy_directory('test/dataset1/large', save_type=2)
+    netlist_ = netlist_from_numpy_directory('../../Placement-datasets/dac2012/superblue2', save_type=2)
     print(netlist_.original_netlist.graph)
     print(netlist_.graph)
     # print(netlist_.cell_prop_dict)
