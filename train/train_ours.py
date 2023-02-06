@@ -154,9 +154,6 @@ def train_ours(
             batch_netlist = []
             total_batch_nodes_num = 0
             total_batch_edge_idx = 0
-            batch_cell_feature = []
-            batch_net_feature = []
-            batch_pin_feature = []
             sub_netlist_feature_idrange = []
             batch_cell_size = []
 
@@ -167,18 +164,11 @@ def train_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
-                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
-                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if total_batch_nodes_num > 10000 or j == n_netlist - 1:
-                    batch_cell_feature = torch.vstack(batch_cell_feature)
-                    batch_net_feature = torch.vstack(batch_net_feature)
-                    batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
                     batch_cell_size = torch.vstack(batch_cell_size)
-                    batch_edge_dis, batch_edge_deflect = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature), batch_cell_size)
+                    batch_edge_dis, batch_edge_deflect = model.forward(batch_graph, batch_cell_size)
                     # batch_edge_dis,batch_edge_deflect = batch_edge_dis.cpu(),batch_edge_deflect.cpu()
                     for nid, sub_netlist in enumerate(batch_netlist):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
@@ -203,9 +193,6 @@ def train_ours(
                     sub_netlist_feature_idrange = []
                     total_batch_nodes_num = 0
                     total_batch_edge_idx = 0
-                    batch_cell_feature = []
-                    batch_net_feature = []
-                    batch_pin_feature = []
                     batch_cell_size = []
                     torch.cuda.empty_cache()
             print(f"\tTraining time per epoch: {time() - t1}")
@@ -225,9 +212,6 @@ def train_ours(
                 batch_netlist_id = []
                 total_batch_nodes_num = 0
                 total_batch_edge_idx = 0
-                batch_cell_feature = []
-                batch_net_feature = []
-                batch_pin_feature = []
                 sub_netlist_feature_idrange = []
                 batch_cell_size = []
                 total_dis = []
@@ -242,14 +226,8 @@ def train_ours(
                     sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                     total_batch_edge_idx += edge_idx_num
                     total_batch_nodes_num += sub_netlist.graph.num_nodes('cell')
-                    batch_cell_feature.append(sub_netlist.graph.nodes['cell'].data['feat'])
-                    batch_net_feature.append(sub_netlist.graph.nodes['net'].data['feat'])
-                    batch_pin_feature.append(sub_netlist.graph.edges['pinned'].data['feat'])
                     batch_cell_size.append(sub_netlist.graph.nodes['cell'].data['size'])
                     if total_batch_nodes_num > 10000 or cnt == total_len - 1:
-                        batch_cell_feature = torch.vstack(batch_cell_feature)
-                        batch_net_feature = torch.vstack(batch_net_feature)
-                        batch_pin_feature = torch.vstack(batch_pin_feature)
                         batch_cell_size = torch.vstack(batch_cell_size)
                         batch_graph = []
                         for nid_ in batch_netlist_id:
@@ -257,8 +235,7 @@ def train_ours(
                             batch_graph.append(netlist.graph)
                         # batch_graph = dgl.batch([sub_netlist.graph for _,sub_netlist in batch_netlist_id])
                         batch_graph = dgl.batch(batch_graph)
-                        batch_edge_dis, batch_edge_deflect = model.forward(
-                            batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
+                        batch_edge_dis, batch_edge_deflect = model.forward(batch_graph, batch_cell_size)
                         # batch_edge_dis,batch_edge_deflect = batch_edge_dis.cpu(),batch_edge_deflect.cpu()
                         total_dis.append(batch_edge_dis.unsqueeze(1))
                         total_angle.append(batch_edge_deflect.unsqueeze(1))
@@ -284,9 +261,6 @@ def train_ours(
                         sub_netlist_feature_idrange = []
                         total_batch_nodes_num = 0
                         total_batch_edge_idx = 0
-                        batch_cell_feature = []
-                        batch_net_feature = []
-                        batch_pin_feature = []
                         batch_cell_size = []
                     cnt += 1
                     torch.cuda.empty_cache()

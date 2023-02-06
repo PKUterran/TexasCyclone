@@ -3,6 +3,7 @@ import torch.nn as nn
 import dgl
 from typing import Tuple, Dict, Any
 from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv, SAGEConv
+import dgl.function as fn
 import numpy as np
 
 from data.graph import Netlist
@@ -26,8 +27,8 @@ class NaiveGNN(nn.Module):
         self.hidden_pin_feats = config['PIN_FEATS']
         self.pass_type = config['PASS_TYPE']
 
-        self.cell_lin = nn.Linear(self.raw_cell_feats, self.hidden_cell_feats)
-        self.net_lin = nn.Linear(self.raw_net_feats, self.hidden_net_feats)
+        self.cell_lin = nn.Linear(self.raw_cell_feats + 2 * self.raw_net_feats, self.hidden_cell_feats)
+        self.net_lin = nn.Linear(self.raw_net_feats + 2 * self.raw_cell_feats, self.hidden_net_feats)
         self.pin_lin = nn.Linear(self.raw_pin_feats, self.hidden_pin_feats)
 
         # 这个naive模型只卷一层，所以直接这么写了。如果需要卷多层的话，建议卷积层单独写一个class，看起来更美观。
@@ -57,13 +58,30 @@ class NaiveGNN(nn.Module):
     def forward(
             self,
             graph: dgl.DGLHeteroGraph,
-            feature: Tuple[torch.tensor, torch.tensor, torch.tensor],
             cell_size: torch.tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        cell_feat, net_feat, pin_feat = feature
-        cell_feat = cell_feat.to(self.device)
-        net_feat = net_feat.to(self.device)
-        pin_feat = pin_feat.to(self.device)
+        ####
+        # cell_feat = graph.nodes['cell'].data['feat']
+        # net_feat = graph.nodes['net'].data['feat']
+        # pin_feat = graph.edges['pin'].data['feat']
+
+        ####
+        graph.update_all(fn.copy_u('feat', 'm'), fn.mean('m', 'mean'), etype='pins')
+        graph.update_all(fn.copy_u('feat', 'm'), fn.max('m', 'max'), etype='pins')
+        graph.update_all(fn.copy_u('feat', 'm'), fn.mean('m', 'mean'), etype='pinned')
+        graph.update_all(fn.copy_u('feat', 'm'), fn.max('m', 'max'), etype='pinned')
+        cell_feat = torch.cat([
+            graph.nodes['cell'].data['feat'],
+            graph.nodes['cell'].data['mean'],
+            graph.nodes['cell'].data['max'],
+        ], dim=-1)
+        net_feat = torch.cat([
+            graph.nodes['net'].data['feat'],
+            graph.nodes['net'].data['mean'],
+            graph.nodes['net'].data['max'],
+        ], dim=-1)
+        pin_feat = graph.edges['pin'].data['feat']
+
         hidden_cell_feat = torch.tanh(self.cell_lin(cell_feat))
         hidden_net_feat = torch.tanh(self.net_lin(net_feat))
         hidden_pin_feat = torch.tanh(self.pin_lin(pin_feat))
@@ -108,13 +126,3 @@ class NaiveGNN(nn.Module):
         bound_size = (cell_size[fathers] + cell_size[sons]).to(self.device) / 2
         edge_dis = edge_dis_ + torch.min(bound_size, dim=1)[0]
         return edge_dis, edge_deflect
-
-    def forward_with_netlist(
-            self,
-            netlist: Netlist
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        graph = netlist.graph
-        cell_feat = netlist.cell_prop_dict['feat']
-        net_feat = netlist.net_prop_dict['feat']
-        pin_feat = netlist.pin_prop_dict['feat']
-        return self.forward(graph, (cell_feat, net_feat, pin_feat), None)

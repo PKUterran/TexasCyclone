@@ -52,14 +52,12 @@ class PlaceGNN(nn.Module):
     def forward(
             self,
             graph: dgl.DGLHeteroGraph,
-            feature: Tuple[torch.tensor, torch.tensor, torch.tensor],
-            cell_size : torch.tensor = None,
+            cell_size: torch.tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        cell_feat, net_feat, pin_feat = feature
-        cell_feat = cell_feat.to(self.device)
-        net_feat = net_feat.to(self.device)
-        pin_feat = pin_feat.to(self.device)
         graph = graph.to(self.device)
+        cell_feat = graph.nodes['cell'].data['feat']
+        net_feat = graph.nodes['net'].data['feat']
+        pin_feat = graph.edges['pin'].data['feat']
         hidden_cell_feat = torch.tanh(self.cell_lin(cell_feat))
         hidden_net_feat = torch.tanh(self.net_lin(net_feat))
         hidden_pin_feat = torch.tanh(self.pin_lin(pin_feat))
@@ -84,16 +82,6 @@ class PlaceGNN(nn.Module):
         tmp = torch.min(torch.abs(bound_size[:,0] / (torch.cos(edge_angle*np.pi)+eps)),torch.abs(bound_size[:,1] / (torch.sin(edge_angle*np.pi)+eps)))
         edge_dis = edge_dis_ + tmp
         return edge_dis, edge_angle
-
-    def forward_with_netlist(
-            self,
-            netlist: Netlist,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        graph = netlist.graph
-        cell_feat = netlist.cell_prop_dict['feat']
-        net_feat = netlist.net_prop_dict['feat']
-        pin_feat = netlist.pin_prop_dict['feat']
-        return self.forward(graph, (cell_feat, net_feat, pin_feat))
 
 
 class HeteroGraphConvLayers(nn.Module):

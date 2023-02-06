@@ -116,9 +116,6 @@ def pretrain_ours(
             batch_netlist = []
             total_batch_nodes_num = 0
             total_batch_edge_idx = 0
-            batch_cell_feature = []
-            batch_net_feature = []
-            batch_pin_feature = []
             sub_netlist_feature_idrange = []
             batch_angle = []
             batch_dis = []
@@ -133,20 +130,13 @@ def pretrain_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
-                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
-                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
                 batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if cnt_graph > 128 or j == n_netlist - 1:
-                    batch_cell_feature = torch.vstack(batch_cell_feature)
-                    batch_net_feature = torch.vstack(batch_net_feature)
-                    batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_cell_size = torch.vstack(batch_cell_size)
                     batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
-                    batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
+                    batch_edge_dis, batch_edge_angle = model.forward(batch_graph, batch_cell_size)
                     # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
                     for nid in range(len(batch_dis)):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
@@ -169,9 +159,6 @@ def pretrain_ours(
                     sub_netlist_feature_idrange = []
                     total_batch_nodes_num = 0
                     total_batch_edge_idx = 0
-                    batch_cell_feature = []
-                    batch_net_feature = []
-                    batch_pin_feature = []
                     batch_angle = []
                     batch_dis = []
                     batch_cell_size = []
@@ -194,9 +181,6 @@ def pretrain_ours(
             batch_netlist = []
             total_batch_nodes_num = 0
             total_batch_edge_idx = 0
-            batch_cell_feature = []
-            batch_net_feature = []
-            batch_pin_feature = []
             sub_netlist_feature_idrange = []
             batch_angle = []
             batch_dis = []
@@ -210,24 +194,17 @@ def pretrain_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
-                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
-                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
                 batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if total_batch_nodes_num > 10000 or j == n_netlist - 1:
-                    batch_cell_feature = torch.vstack(batch_cell_feature)
-                    batch_net_feature = torch.vstack(batch_net_feature)
-                    batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_cell_size = torch.vstack(batch_cell_size)
                     batch_graph = []
                     for j_ in batch_netlist:
                         sub_netlist, _ = list_netlist_dis_angle[j_]
                         batch_graph.append(sub_netlist.graph)
                     batch_graph = dgl.batch(batch_graph)
-                    batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
+                    batch_edge_dis, batch_edge_angle = model.forward(batch_graph, batch_cell_size)
                     # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
                     for nid in range(len(batch_dis)):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
@@ -251,9 +228,6 @@ def pretrain_ours(
                     sub_netlist_feature_idrange = []
                     total_batch_nodes_num = 0
                     total_batch_edge_idx = 0
-                    batch_cell_feature = []
-                    batch_net_feature = []
-                    batch_pin_feature = []
                     batch_angle = []
                     batch_dis = []
                     batch_cell_size = []
