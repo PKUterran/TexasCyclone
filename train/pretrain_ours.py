@@ -15,6 +15,9 @@ from train.model import NaiveGNN, PlaceGNN
 import dgl
 import random
 
+from data.load_data import layout_from_netlist_dis_deflect
+from matplotlib import pyplot as plt
+
 
 def pretrain_ours(
         args: argparse.Namespace,
@@ -47,11 +50,11 @@ def pretrain_ours(
         return list_netlist_dis_angle
 
     train_list_netlist_dis_angle = unpack_netlist_dis_angle(
-        [load_pretrain_data(dataset) for dataset in train_datasets])
+        [load_pretrain_data(dataset,2) for dataset in train_datasets])
     valid_list_netlist_dis_angle = unpack_netlist_dis_angle(
-        [load_pretrain_data(dataset) for dataset in valid_datasets])
+        [load_pretrain_data(dataset,1) for dataset in valid_datasets])
     test_list_netlist_dis_angle = unpack_netlist_dis_angle(
-        [load_pretrain_data(dataset) for dataset in test_datasets])
+        [load_pretrain_data(dataset,1) for dataset in test_datasets])
     print(f'\t# of samples: '
           f'{len(train_list_netlist_dis_angle)} train, '
           f'{len(valid_list_netlist_dis_angle)} valid, '
@@ -94,7 +97,8 @@ def pretrain_ours(
     print(f'# of parameters: {n_param}')
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma=(1 - args.lr_decay))
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma=(1 - args.lr_decay))
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=20,eta_min=1e-6)
 
     # Train model
     best_metric = 1e8  # lower is better
@@ -116,9 +120,6 @@ def pretrain_ours(
             batch_netlist = []
             total_batch_nodes_num = 0
             total_batch_edge_idx = 0
-            batch_cell_feature = []
-            batch_net_feature = []
-            batch_pin_feature = []
             sub_netlist_feature_idrange = []
             batch_angle = []
             batch_dis = []
@@ -133,29 +134,31 @@ def pretrain_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
-                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
-                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
                 batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if cnt_graph > 128 or j == n_netlist - 1:
-                    batch_cell_feature = torch.vstack(batch_cell_feature)
-                    batch_net_feature = torch.vstack(batch_net_feature)
-                    batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_cell_size = torch.vstack(batch_cell_size)
                     batch_graph = dgl.batch([sub_netlist.graph for sub_netlist in batch_netlist])
                     batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
+                        batch_graph, batch_cell_size)
                     # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
                     for nid in range(len(batch_dis)):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
                         edge_dis, edge_angle = batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
                         dis_angle = [batch_dis[nid], batch_angle[nid]]
-                        edge_dis_loss = F.mse_loss(torch.log(edge_dis + 1),
+                        edge_dis = edge_dis #/ 0.005 #* ((1325**2+1320**2))**0.5
+                        angle = dis_angle[1] % (2 * torch.pi)
+                        angle = angle - torch.ceil(angle / torch.pi - 1) * torch.pi * 2
+                        angle = torch.where(angle > torch.pi,angle-torch.pi*2,angle)
+                        assert torch.all(angle <= torch.pi)
+                        assert torch.all(angle >= -torch.pi)
+                        edge_dis_loss = F.smooth_l1_loss(torch.log(edge_dis + 1),
                                                    torch.log(dis_angle[0].to(device) + 1))
-                        edge_angle_loss = F.mse_loss(edge_angle % (2 * torch.pi),
-                                                     dis_angle[1].to(device) % (2 * torch.pi))
+                        # edge_angle_loss = F.mse_loss(edge_angle % (2 * torch.pi),
+                        #                              dis_angle[1].to(device) % (2 * torch.pi))
+                        edge_angle_loss = F.smooth_l1_loss(edge_angle,
+                                                     angle.to(device))
                         loss = sum((
                             edge_dis_loss * 1.0,
                             edge_angle_loss * 1.0,
@@ -169,9 +172,6 @@ def pretrain_ours(
                     sub_netlist_feature_idrange = []
                     total_batch_nodes_num = 0
                     total_batch_edge_idx = 0
-                    batch_cell_feature = []
-                    batch_net_feature = []
-                    batch_pin_feature = []
                     batch_angle = []
                     batch_dis = []
                     batch_cell_size = []
@@ -194,9 +194,6 @@ def pretrain_ours(
             batch_netlist = []
             total_batch_nodes_num = 0
             total_batch_edge_idx = 0
-            batch_cell_feature = []
-            batch_net_feature = []
-            batch_pin_feature = []
             sub_netlist_feature_idrange = []
             batch_angle = []
             batch_dis = []
@@ -210,16 +207,10 @@ def pretrain_ours(
                 sub_netlist_feature_idrange.append([total_batch_edge_idx, total_batch_edge_idx + edge_idx_num])
                 total_batch_edge_idx += edge_idx_num
                 total_batch_nodes_num += netlist.graph.num_nodes('cell')
-                batch_cell_feature.append(netlist.graph.nodes['cell'].data['feat'])
-                batch_net_feature.append(netlist.graph.nodes['net'].data['feat'])
-                batch_pin_feature.append(netlist.graph.edges['pinned'].data['feat'])
                 batch_dis.append(dis_angle[0])
                 batch_angle.append(dis_angle[1])
                 batch_cell_size.append(netlist.graph.nodes['cell'].data['size'])
                 if total_batch_nodes_num > 10000 or j == n_netlist - 1:
-                    batch_cell_feature = torch.vstack(batch_cell_feature)
-                    batch_net_feature = torch.vstack(batch_net_feature)
-                    batch_pin_feature = torch.vstack(batch_pin_feature)
                     batch_cell_size = torch.vstack(batch_cell_size)
                     batch_graph = []
                     for j_ in batch_netlist:
@@ -227,16 +218,23 @@ def pretrain_ours(
                         batch_graph.append(sub_netlist.graph)
                     batch_graph = dgl.batch(batch_graph)
                     batch_edge_dis, batch_edge_angle = model.forward(
-                        batch_graph, (batch_cell_feature, batch_net_feature, batch_pin_feature),batch_cell_size)
+                        batch_graph, batch_cell_size)
                     # batch_edge_dis,batch_edge_angle = batch_edge_dis.cpu(),batch_edge_angle.cpu()
                     for nid in range(len(batch_dis)):
                         begin_idx, end_idx = sub_netlist_feature_idrange[nid]
                         edge_dis, edge_angle = batch_edge_dis[begin_idx:end_idx], batch_edge_angle[begin_idx:end_idx]
                         dis_angle = [batch_dis[nid], batch_angle[nid]]
-                        edge_dis_loss = F.mse_loss(torch.log(edge_dis + 1),
+                        angle = dis_angle[1] % (2 * torch.pi)
+                        angle = angle - torch.ceil(angle / torch.pi - 1) * torch.pi * 2
+                        angle = torch.where(angle > torch.pi,angle-torch.pi*2,angle)
+                        edge_dis_loss = F.smooth_l1_loss(torch.log(edge_dis + 1),
                                                    torch.log(dis_angle[0].to(device) + 1))
-                        edge_angle_loss = F.mse_loss(edge_angle % (2 * torch.pi),
-                                                     dis_angle[1].to(device) % (2 * torch.pi))
+                        # edge_angle_loss = F.mse_loss(edge_angle % (2 * torch.pi),
+                        #                              dis_angle[1].to(device) % (2 * torch.pi))
+                        edge_angle_loss = F.smooth_l1_loss(edge_angle,
+                                                     angle.to(device))
+                        assert torch.all(angle <= torch.pi)
+                        assert torch.all(angle >= -torch.pi)
                         loss = sum((
                             edge_dis_loss * 1.0,
                             edge_angle_loss * 0.1,
@@ -251,9 +249,6 @@ def pretrain_ours(
                     sub_netlist_feature_idrange = []
                     total_batch_nodes_num = 0
                     total_batch_edge_idx = 0
-                    batch_cell_feature = []
-                    batch_net_feature = []
-                    batch_pin_feature = []
                     batch_angle = []
                     batch_dis = []
                     batch_cell_size = []

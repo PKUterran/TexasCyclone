@@ -6,6 +6,7 @@ from dgl.nn.pytorch import HeteroGraphConv, CFConv, GraphConv, SAGEConv
 import numpy as np
 
 from data.graph import Netlist
+import dgl.function as fn
 
 
 class NaiveGNN(nn.Module):
@@ -26,19 +27,32 @@ class NaiveGNN(nn.Module):
         self.hidden_pin_feats = config['PIN_FEATS']
         self.pass_type = config['PASS_TYPE']
 
-        self.cell_lin = nn.Linear(self.raw_cell_feats, self.hidden_cell_feats)
-        self.net_lin = nn.Linear(self.raw_net_feats, self.hidden_net_feats)
+        self.cell_lin = nn.Linear(self.raw_cell_feats + 2 * self.raw_net_feats, self.hidden_cell_feats)
+        self.net_lin = nn.Linear(self.raw_net_feats + 2 * self.raw_cell_feats, self.hidden_net_feats)
         self.pin_lin = nn.Linear(self.raw_pin_feats, self.hidden_pin_feats)
 
         # 这个naive模型只卷一层，所以直接这么写了。如果需要卷多层的话，建议卷积层单独写一个class，看起来更美观。
         if self.pass_type == 'bidirection':
-            self.hetero_conv = HeteroGraphConv({
-                'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats),
+            self.hetero_conv_list = nn.ModuleList([
+                HeteroGraphConv({
+                'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats,activation=nn.ReLU()),#for origin
+                # 'pins': SAGEConv(in_feats=(self.hidden_cell_feats, self.hidden_net_feats), aggregator_type='mean',
+                #                    out_feats=self.hidden_cell_feats),#for cell flow
                 'pinned': CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                                  hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-                # 'points-to': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-                # 'pointed-from': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-            }, aggregate='max')
+                # 'points-to': SAGEConv(in_feats=(self.hidden_cell_feats, self.hidden_cell_feats), aggregator_type='mean',
+                #                    out_feats=self.hidden_cell_feats),#for cell flow
+            }, aggregate='mean')
+            for _ in range(3)
+            ])
+            # self.edge_weight_lin = nn.Linear(self.hidden_pin_feats, 1)#for cell flow
+            # self.hetero_conv = HeteroGraphConv({
+            #     'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats),
+            #     'pinned': CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
+            #                      hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+            #     # 'points-to': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+            #     # 'pointed-from': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
+            # }, aggregate='max')
         elif self.pass_type == 'single':
             self.hetero_conv = HeteroGraphConv({
                 'pinned': SAGEConv(in_feats=(self.hidden_net_feats, self.hidden_cell_feats), aggregator_type='mean',
@@ -50,17 +64,48 @@ class NaiveGNN(nn.Module):
         else:
             raise NotImplementedError
 
-        self.edge_dis_readout = nn.Linear(2 * self.hidden_cell_feats + self.hidden_net_feats, 1)
-        self.edge_deflect_readout = nn.Linear(3 * self.hidden_cell_feats + 2 * self.hidden_net_feats, 1)
+        output_dim = 2 * self.hidden_cell_feats + self.hidden_net_feats
+        # self.edge_dis_readout = nn.Linear(2 * self.hidden_cell_feats + self.hidden_net_feats, 1)
+        self.edge_dis_readout = nn.Sequential(
+            nn.Linear(output_dim,output_dim//2),
+            nn.ReLU(),
+            nn.Linear(output_dim//2,output_dim//4),
+            nn.ReLU(),
+            nn.Linear(output_dim//4,1)
+        )
+        output_dim = 3 * self.hidden_cell_feats + 2 * self.hidden_net_feats
+        # self.edge_deflect_readout = nn.Linear(3 * self.hidden_cell_feats + 2 * self.hidden_net_feats, 1)
+        self.edge_deflect_readout = nn.Sequential(
+            nn.Linear(output_dim,output_dim//2),
+            nn.ReLU(),
+            nn.Linear(output_dim//2,output_dim//4),
+            nn.ReLU(),
+            nn.Linear(output_dim//4,1)
+        )
         self.to(self.device)
 
     def forward(
             self,
             graph: dgl.DGLHeteroGraph,
-            feature: Tuple[torch.tensor, torch.tensor, torch.tensor],
             cell_size: torch.tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        cell_feat, net_feat, pin_feat = feature
+        graph = graph.to(self.device)
+        graph.update_all(fn.copy_u('feat', 'm'), fn.mean('m', 'mean'), etype='pins')
+        graph.update_all(fn.copy_u('feat', 'm'), fn.max('m', 'max'), etype='pins')
+        graph.update_all(fn.copy_u('feat', 'm'), fn.mean('m', 'mean'), etype='pinned')
+        graph.update_all(fn.copy_u('feat', 'm'), fn.max('m', 'max'), etype='pinned')
+        cell_feat = torch.cat([
+            graph.nodes['cell'].data['feat'],
+            graph.nodes['cell'].data['mean'],
+            graph.nodes['cell'].data['max'],
+        ], dim=-1)
+        net_feat = torch.cat([
+            graph.nodes['net'].data['feat'],
+            graph.nodes['net'].data['mean'],
+            graph.nodes['net'].data['max'],
+        ], dim=-1)
+        pin_feat = graph.edges['pinned'].data['feat']
+
         cell_feat = cell_feat.to(self.device)
         net_feat = net_feat.to(self.device)
         pin_feat = pin_feat.to(self.device)
@@ -71,11 +116,24 @@ class NaiveGNN(nn.Module):
         h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
         graph = graph.to(self.device)
         if self.pass_type == 'bidirection':
-            h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)
-            h = {'cell': hidden_cell_feat, 'net': h['net']}
-            h = self.hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
-                                         mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})
-            hidden_cell_feat = h['cell']
+            # edge_weight = torch.tanh(self.edge_weight_lin(hidden_pin_feat))###for cell flow
+            for hetero_conv in self.hetero_conv_list:
+                h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
+                # h = hetero_conv.forward(graph.edge_type_subgraph(['pins']), h,
+                #                             mod_kwargs={'pins': {'edge_weight': edge_weight}})###for cell flow
+                h = hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)###for origin
+                # hidden_net_feat = h['net']
+                h = {'cell': hidden_cell_feat, 'net': h['net']}
+                # h = hetero_conv.forward(graph.edge_type_subgraph(['pinned','points-to']), h,
+                #                             mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})###for cell flow
+                h = hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
+                                            mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})###for origin
+                hidden_cell_feat = h['cell']
+            # h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)
+            # h = {'cell': hidden_cell_feat, 'net': h['net']}
+            # h = self.hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
+            #                              mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})
+            # hidden_cell_feat = h['cell']
         elif self.pass_type == 'single':
             edge_weight = torch.tanh(self.edge_weight_lin(hidden_pin_feat))
             h = self.hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
