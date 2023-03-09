@@ -31,21 +31,22 @@ class NaiveGNN(nn.Module):
         self.net_lin = nn.Linear(self.raw_net_feats + 2 * self.raw_cell_feats, self.hidden_net_feats)
         self.pin_lin = nn.Linear(self.raw_pin_feats, self.hidden_pin_feats)
 
+        self.position_embedding = PositionalEncoding(d_model = self.hidden_cell_feats,max_len = 2000000)
         # 这个naive模型只卷一层，所以直接这么写了。如果需要卷多层的话，建议卷积层单独写一个class，看起来更美观。
         if self.pass_type == 'bidirection':
             self.hetero_conv_list = nn.ModuleList([
                 HeteroGraphConv({
-                'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats,activation=nn.ReLU()),#for origin
-                # 'pins': SAGEConv(in_feats=(self.hidden_cell_feats, self.hidden_net_feats), aggregator_type='mean',
-                #                    out_feats=self.hidden_cell_feats),#for cell flow
+                # 'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats,activation=nn.ReLU()),#for origin
+                'pins': SAGEConv(in_feats=(self.hidden_cell_feats, self.hidden_net_feats), aggregator_type='mean',
+                                   out_feats=self.hidden_cell_feats),#for cell flow
                 'pinned': CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
                                  hidden_feats=self.hidden_cell_feats, out_feats=self.hidden_cell_feats),
-                # 'points-to': SAGEConv(in_feats=(self.hidden_cell_feats, self.hidden_cell_feats), aggregator_type='mean',
-                #                    out_feats=self.hidden_cell_feats),#for cell flow
+                'points-to': SAGEConv(in_feats=(self.hidden_cell_feats, self.hidden_cell_feats), aggregator_type='mean',
+                                   out_feats=self.hidden_cell_feats),#for cell flow
             }, aggregate='mean')
             for _ in range(3)
             ])
-            # self.edge_weight_lin = nn.Linear(self.hidden_pin_feats, 1)#for cell flow
+            self.edge_weight_lin = nn.Linear(self.hidden_pin_feats, 1)#for cell flow
             # self.hetero_conv = HeteroGraphConv({
             #     'pins': GraphConv(in_feats=self.hidden_cell_feats, out_feats=self.hidden_net_feats),
             #     'pinned': CFConv(node_in_feats=self.hidden_net_feats, edge_in_feats=self.hidden_pin_feats,
@@ -116,18 +117,18 @@ class NaiveGNN(nn.Module):
         h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
         graph = graph.to(self.device)
         if self.pass_type == 'bidirection':
-            # edge_weight = torch.tanh(self.edge_weight_lin(hidden_pin_feat))###for cell flow
+            edge_weight = torch.tanh(self.edge_weight_lin(hidden_pin_feat))###for cell flow
             for hetero_conv in self.hetero_conv_list:
                 h = {'cell': hidden_cell_feat, 'net': hidden_net_feat}
-                # h = hetero_conv.forward(graph.edge_type_subgraph(['pins']), h,
-                #                             mod_kwargs={'pins': {'edge_weight': edge_weight}})###for cell flow
-                h = hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)###for origin
+                h = hetero_conv.forward(graph.edge_type_subgraph(['pins']), h,
+                                            mod_kwargs={'pins': {'edge_weight': edge_weight}})###for cell flow
+                # h = hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)###for origin
                 # hidden_net_feat = h['net']
                 h = {'cell': hidden_cell_feat, 'net': h['net']}
-                # h = hetero_conv.forward(graph.edge_type_subgraph(['pinned','points-to']), h,
-                #                             mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})###for cell flow
-                h = hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
-                                            mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})###for origin
+                h = hetero_conv.forward(graph.edge_type_subgraph(['pinned','points-to']), h,
+                                            mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})###for cell flow
+                # h = hetero_conv.forward(graph.edge_type_subgraph(['pinned']), h,
+                #                             mod_kwargs={'pinned': {'edge_feats': hidden_pin_feat}})###for origin
                 hidden_cell_feat = h['cell']
             # h = self.hetero_conv.forward(graph.edge_type_subgraph(['pins']), h)
             # h = {'cell': hidden_cell_feat, 'net': h['net']}
@@ -176,3 +177,18 @@ class NaiveGNN(nn.Module):
         net_feat = netlist.net_prop_dict['feat']
         pin_feat = netlist.pin_prop_dict['feat']
         return self.forward(graph, (cell_feat, net_feat, pin_feat), None)
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEncoding, self).__init__()       
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        #pe.requires_grad = False
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return x + self.pe[:x.size(0), :]
